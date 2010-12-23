@@ -1,0 +1,9 @@
+TESTS = \
+  module-lwes_app \
+  module-lwes_channel_manager \
+  module-lwes \
+  module-lwes_sup \
+  module-lwes_channel \
+  module-lwes_channel_sup \
+  module-lwes_event \
+  module-lwes_util
