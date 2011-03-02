@@ -1,0 +1,12 @@
+*.app
+.*.app_ok
+*.beam
+.*.beam_ok
+.dialyzer_ok
+erl_crash.dump
+.*.erl_ok
+fw-erl-app-template.app.in
+*.in
+Makefile
+Makefile.am
+.*.script_ok

@@ -1,0 +1,13 @@
+.*.app_ok
+*.beam
+.*.beam_ok
+*.COVER.out
+erl_crash.dump
+.*.erl_ok
+*.in
+Makefile
+Makefile.am
+module-*
+otp-test-wrapper.sh
+.*.script_ok
+*.test.out
