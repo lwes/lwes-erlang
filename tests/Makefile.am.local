@@ -6,4 +6,6 @@ TESTS = \
   module-lwes_channel \
   module-lwes_channel_sup \
   module-lwes_event \
+  module-lwes_journaller \
+  module-lwes_multi_emitter \
   module-lwes_util

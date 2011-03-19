@@ -1,2 +1,10 @@
+Version 1.0.0 (molinaro)
+  * changed lwes:open to take different number of args, breaks backward
+  compatibility
+  * add 'dict' as a format for event attributes in deserialization
+  * added journaller
+  * added multi emitter
+  * added 'json' as a format for event deserialization
+
 Version 0.0.0 (molinaro)
   * Initial version

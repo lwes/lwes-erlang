@@ -1,4 +1,8 @@
 # put whatever (auto)make commands here, they will be included from Makefile.am
+#
+
+# work around dict opaque type problem
+DIALYZERFLAGS += -Wno_opaque
 
 dist_erlappsrc_DATA = 		\
   lwes_internal.hrl \

@@ -3,6 +3,7 @@
 -behaviour (gen_server).
 
 -include_lib ("lwes.hrl").
+-include ("lwes_internal.hrl").
 
 -ifdef(HAVE_EUNIT).
 -include_lib("eunit/include/eunit.hrl").
@@ -10,7 +11,7 @@
 
 %% API
 -export ([ start_link/1,
-           open/3,
+           open/2,
            register_callback/4,
            send_to/2,
            close/1
@@ -27,7 +28,6 @@
 
 -record (state, {socket, channel, type, callback}).
 -record (callback, {function, format, state}).
--record (channel, {ip, port, is_multicast, type, ref}).
 
 %%====================================================================
 %% API functions
@@ -35,8 +35,8 @@
 start_link (Channel) ->
   gen_server:start_link (?MODULE, [Channel], []).
 
-open (Type, Ip, Port ) ->
-  Channel = #channel {
+open (Type, {Ip, Port}) ->
+  Channel = #lwes_channel {
               ip = Ip,
               port = Port,
               is_multicast = is_multicast (Ip),
@@ -44,7 +44,7 @@ open (Type, Ip, Port ) ->
               ref = make_ref ()
             },
   { ok, _Pid } = lwes_channel_manager:open_channel (Channel),
-  Channel.
+  { ok, Channel}.
 
 register_callback (Channel, CallbackFunction, EventType, CallbackState) ->
   find_and_call ( Channel,
@@ -59,7 +59,7 @@ close (Channel) ->
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
-init ([ Channel = #channel {
+init ([ Channel = #lwes_channel {
                     ip = Ip,
                     port = Port,
                     is_multicast = IsMulticast,
@@ -92,7 +92,7 @@ init ([ Channel = #channel {
 handle_call ({ register, Function, Format, Accum },
              _From,
              State = #state {
-               channel = #channel {type = listener }
+               channel = #lwes_channel {type = listener }
              }) ->
   { reply,
     ok,
@@ -104,22 +104,20 @@ handle_call ({ send, Packet },
              _From,
              State = #state {
                socket = Socket,
-               channel = #channel { ip = Ip, port = Port }
+               channel = #lwes_channel { ip = Ip, port = Port }
              }) ->
   { reply,
-    gen_udp:send (Socket, Ip, Port, Packet ),
+    gen_udp:send (Socket, Ip, Port, Packet),
     State };
 
 handle_call (Request, From, State) ->
-  error_logger:warning_msg
-    ("lwes_channel unrecognized call ~p from ~p~n",[Request, From]),
+  error_logger:warning_msg ("unrecognized call ~p from ~p~n",[Request, From]),
   { reply, ok, State }.
 
 handle_cast (stop, State) ->
   {stop, normal, State};
 handle_cast (Request, State) ->
-  error_logger:warning_msg
-    ("lwes_channel unrecognized cast ~p~n",[Request]),
+  error_logger:warning_msg ("unrecognized cast ~p~n",[Request]),
   { noreply, State }.
 
 % skip if we don't have a handler
@@ -150,8 +148,7 @@ handle_info ( Packet = {udp, _, _, _, _},
   };
 
 handle_info ( Request, State) ->
-  error_logger:warning_msg
-    ("lwes_channel unrecognized info ~p~n",[Request]),
+  error_logger:warning_msg ("unrecognized info ~p~n",[Request]),
   {noreply, State}.
 
 terminate (_Reason, #state {socket = Socket, channel = Channel}) ->

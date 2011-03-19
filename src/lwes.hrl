@@ -1,7 +1,7 @@
 -ifndef(_lwes_included).
 -define(_lwes_included, yup).
 
--record (lwes_event, {name, attrs = []}).
+-record (lwes_event, {name, attrs}).
 
 -define (LWES_TYPE_U_INT_16, 1).
 -define (LWES_TYPE_INT_16,   2).

@@ -2,7 +2,7 @@
 # variable FW_PACKAGE_DEFAULT_MAINTAINER if non-empty at init time
 
 FW_PACKAGE_NAME="lwes-erlang"
-FW_PACKAGE_VERSION="0.0.0"
+FW_PACKAGE_VERSION="1.0.0"
 FW_PACKAGE_MAINTAINER="Anthony Molinaro <anthony.molinaro@openx.org>"
 FW_PACKAGE_SHORT_DESCRIPTION="Erlang Bindings for LWES"
 FW_PACKAGE_DESCRIPTION=`cat README`
