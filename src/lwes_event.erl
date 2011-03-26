@@ -212,11 +212,11 @@ write (string, V) when is_atom (V) ->
   write (string, atom_to_list (V));
 write (string, V) when is_list (V); is_binary (V) ->
   case iolist_size (V) of
-    SL when SL >= 1, SL =< 65535 ->
+    SL when SL >= 0, SL =< 65535 ->
       [ <<?LWES_TYPE_STRING:8/integer-unsigned-big,
           SL:16/integer-unsigned-big>>, V ];
     _ ->
-      throw (string_to_big)
+      throw (string_too_big)
   end.
 
 read_name (Binary) ->
@@ -234,9 +234,19 @@ read_attrs (Bin, Format, Accum) ->
   { V, Rest } = read_value (T, Vals, Format),
   read_attrs (Rest, Format,
                case Format of
-                 dict -> dict:store (K, V, Accum);
-                 tagged -> [ {type_to_atom (T), K, V} | Accum ];
-                 _ -> [ {K, V} | Accum ]
+                 dict ->
+                   dict:store (K, V, Accum);
+                 tagged ->
+                   [ {type_to_atom (T), K, V} | Accum ];
+                 json ->
+                   [ {K, try mochijson2:decode (V) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
+                 _ ->
+                   [ {K, V} | Accum ]
                end).
 
 read_value (?LWES_TYPE_U_INT_16, Bin, _Format) ->

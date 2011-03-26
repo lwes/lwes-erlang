@@ -1,3 +1,7 @@
+Version 1.0.1 (molinaro)
+  * zero length strings should be allowed
+  * for 'json' format, use mochijson2:decode for values
+
 Version 1.0.0 (molinaro)
   * changed lwes:open to take different number of args, breaks backward
   compatibility
