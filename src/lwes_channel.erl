@@ -75,12 +75,19 @@ init ([ Channel = #lwes_channel {
                          { multicast_ttl, 4 },
                          { multicast_loop, false },
                          { add_membership, {Ip, {0,0,0,0}}},
+                         { recbuf, 100 * 65535 },
                          binary
                        ]);
       {listener, false} ->
-        gen_udp:open ( Port, [ binary ]);
+        gen_udp:open ( Port,
+                       [ { recbuf, 100 * 65535 },
+                         binary
+                       ]);
       {_, _} ->
-        gen_udp:open ( 0, [ binary ])
+        gen_udp:open ( 0,
+                       [ { recbuf, 100 * 65535 },
+                         binary
+                       ])
     end,
   lwes_channel_manager:register_channel (Channel, self()),
   { ok, #state { socket = Socket,

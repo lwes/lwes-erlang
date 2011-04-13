@@ -1,3 +1,6 @@
+Version 1.0.2 (molinaro)
+  * need to increase recbuf size in order to journal everything
+
 Version 1.0.1 (molinaro)
   * zero length strings should be allowed
   * for 'json' format, use mochijson2:decode for values
