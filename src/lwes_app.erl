@@ -16,7 +16,7 @@
 %-                                  API                                -
 %-=====================================================================-
 start () ->
-  [ensure_started (App) || App <- [sasl, lwes]].
+  [ensure_started (App) || App <- [sasl, mochiweb, lwes]].
 
 %-=====================================================================-
 %-                        application callbacks                        -
@@ -45,8 +45,8 @@ ensure_started(App) ->
 
 lwes_app_test_ () ->
   [
-    ?_assertEqual ([ok, ok],lwes_app:start()),
-    ?_assertEqual ([ok, ok],lwes_app:start()),
+    ?_assertEqual ([ok, ok, ok],lwes_app:start()),
+    ?_assertEqual ([ok, ok, ok],lwes_app:start()),
     ?_assertEqual (ok, application:stop (lwes))
   ].
 
