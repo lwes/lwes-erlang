@@ -71,7 +71,7 @@ open (_, _) ->
 
 % emit an event to one or more channels
 emit (Channel, Event) when is_record (Channel, lwes_channel) ->
-  ok = lwes_channel:send_to (Channel, lwes_event:to_binary (Event)),
+  lwes_channel:send_to (Channel, lwes_event:to_binary (Event)),
   % channel doesn't actually change for a single emitter
   Channel;
 emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
