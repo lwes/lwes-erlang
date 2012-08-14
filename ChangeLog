@@ -1,3 +1,9 @@
+Version 2.0.0 (molinaro)
+  * switch to decoding as proplists, instead of struct's
+  * moved some files from mochiweb into lwes, so I could skip the dependency
+  * don't check return code of send so that it doesn't crash lwes if the
+  network is down
+
 Version 1.0.3 (molinaro)
   * missing dependency
 
