@@ -239,7 +239,7 @@ read_attrs (Bin, Format, Accum) ->
                  tagged ->
                    [ {type_to_atom (T), K, V} | Accum ];
                  json ->
-                   [ {K, try mochijson2:decode (V) of
+                   [ {K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
                            S -> S
                          catch
                            _:_ -> V
