@@ -129,6 +129,10 @@ from_binary (Binary, Format, Accum0) ->
   case Format of
     json ->
       [{<<"EventName">>, EventName} | AttrList ];
+    json_proplist ->
+      [{<<"EventName">>, EventName} | AttrList ];
+    json_eep18 ->
+      [{<<"EventName">>, EventName} | AttrList ];
     _ ->
       #lwes_event { name = EventName, attrs = AttrList }
   end.
@@ -239,7 +243,21 @@ read_attrs (Bin, Format, Accum) ->
                  tagged ->
                    [ {type_to_atom (T), K, V} | Accum ];
                  json ->
+                   [ {K, try lwes_mochijson2:decode (V, [{format, struct}]) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
+                 json_proplist ->
                    [ {K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
+                 json_eep18 ->
+                   [ {K, try lwes_mochijson2:decode (V, [{format, eep18}]) of
                            S -> S
                          catch
                            _:_ -> V
@@ -268,6 +286,18 @@ read_value (?LWES_TYPE_INT_64, Bin, _Format) ->
   <<V:64/integer-signed-big, Rest/binary>> = Bin,
   { V, Rest };
 read_value (?LWES_TYPE_IP_ADDR, Bin, json) ->
+  <<V1:8/integer-unsigned-big,
+    V2:8/integer-unsigned-big,
+    V3:8/integer-unsigned-big,
+    V4:8/integer-unsigned-big, Rest/binary>> = Bin,
+  { ip2bin ({V4,V3,V2,V1}), Rest };
+read_value (?LWES_TYPE_IP_ADDR, Bin, json_proplist) ->
+  <<V1:8/integer-unsigned-big,
+    V2:8/integer-unsigned-big,
+    V3:8/integer-unsigned-big,
+    V4:8/integer-unsigned-big, Rest/binary>> = Bin,
+  { ip2bin ({V4,V3,V2,V1}), Rest };
+read_value (?LWES_TYPE_IP_ADDR, Bin, json_eep18) ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,

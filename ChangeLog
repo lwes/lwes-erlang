@@ -1,3 +1,10 @@
+Version 2.1.0 (molinaro)
+  * proplists was actually wrong as ejson requires eep18 and as that my
+    primary usecase for the json output, there are now 3 json decode formats
+    json will return mochijson2 struct format, json_proplist will return
+    the mochijson2 proplist formant, and json_eep18 will return the mochijson2
+    eep18 format
+
 Version 2.0.0 (molinaro)
   * switch to decoding as proplists, instead of struct's
   * moved some files from mochiweb into lwes, so I could skip the dependency
