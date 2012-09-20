@@ -140,7 +140,7 @@ from_binary (Binary, Format, Accum0) ->
     json_proplist ->
       [{<<"EventName">>, EventName} | AttrList ];
     json_eep18 ->
-      [{<<"EventName">>, EventName} | AttrList ];
+      { [{<<"EventName">>, EventName} | AttrList ] };
     _ ->
       #lwes_event { name = EventName, attrs = AttrList }
   end.
