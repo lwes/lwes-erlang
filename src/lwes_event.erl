@@ -105,6 +105,14 @@ from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
         [ { <<"SenderIP">>,   ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_proplist ->
+        [ { <<"SenderIP">>,   ip2bin (SenderIP) },
+          { <<"SenderPort">>, SenderPort },
+          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_eep18 ->
+        [ { <<"SenderIP">>,   ip2bin (SenderIP) },
+          { <<"SenderPort">>, SenderPort },
+          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
       _ ->
         [ { <<"SenderIP">>,   SenderIP },
           { <<"SenderPort">>, SenderPort },

@@ -1,3 +1,6 @@
+Version 2.1.1 (molinaro)
+  * did the last version too fast missed some cases where json was used
+
 Version 2.1.0 (molinaro)
   * proplists was actually wrong as ejson requires eep18 and as that my
     primary usecase for the json output, there are now 3 json decode formats

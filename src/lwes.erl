@@ -105,13 +105,16 @@ emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
 %            (as binary).  This should means you can pass the returned value
 %            to mochijson2:encode (or other json encoders), and have the event
 %            as a json document
+%   json_eep18 - uses the eep18 format of mochijson2 decode
+%   json_proplist - uses the proplist format of mochijson2 decode
 %
 % Initial State is whatever you want
 listen (Channel, CallbackFunction, EventType, CallbackInitialState)
   when is_function (CallbackFunction, 2),
        EventType =:= raw ; EventType =:= tagged ;
        EventType =:= list ; EventType =:= dict ;
-       EventType =:= json ->
+       EventType =:= json ; EventType =:= json_proplist ;
+       EventType =:= json_eep18 ->
   lwes_channel:register_callback (Channel, CallbackFunction,
                                   EventType, CallbackInitialState).
 
