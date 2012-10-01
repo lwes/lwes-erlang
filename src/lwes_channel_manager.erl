@@ -3,6 +3,7 @@
 -behaviour (gen_server).
 
 -include_lib ("lwes.hrl").
+-include_lib ("lwes_internal.hrl").
 
 -ifdef(HAVE_EUNIT).
 -include_lib("eunit/include/eunit.hrl").
@@ -14,7 +15,8 @@
            register_channel/2,
            unregister_channel/1,
            find_channel/1,
-           close_channel/1
+           close_channel/1,
+           stats/0
          ]).
 
 %% gen_server callbacks
@@ -48,6 +50,19 @@ find_channel (Channel) ->
   case ets:lookup (?TABLE, Channel) of
     [] -> {error, not_open} ;
     [{_Channel, Pid}] -> Pid
+  end.
+
+stats () ->
+  case ets:info (?TABLE) of
+    undefined -> ok;
+    _ ->
+      [ begin
+          {Sent, Received} = lwes_channel:stats(C),
+          {Ip, Port, Sent, Received}
+        end
+        || {C,_} = {#lwes_channel {ip = Ip, port = Port},_}
+        <- ets:tab2list (?TABLE)
+      ]
   end.
 
 close_channel (Channel) ->

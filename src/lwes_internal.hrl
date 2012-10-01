@@ -25,6 +25,6 @@
           element (4,V) =< 255)).
 
 -record (lwes_channel, {ip, port, is_multicast, type, ref}).
--record (lwes_multi_emitter, {m, n}).
+-record (lwes_multi_emitter, {type, m, n}).
 
 -endif.

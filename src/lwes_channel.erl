@@ -14,7 +14,8 @@
            open/2,
            register_callback/4,
            send_to/2,
-           close/1
+           close/1,
+           stats/1
          ]).
 
 %% gen_server callbacks
@@ -26,7 +27,7 @@
            code_change/3
          ]).
 
--record (state, {socket, channel, type, callback}).
+-record (state, {socket, channel, type, callback, sent = 0, received = 0}).
 -record (callback, {function, format, state}).
 
 %%====================================================================
@@ -55,6 +56,9 @@ send_to (Channel, Msg) ->
 
 close (Channel) ->
   find_and_cast (Channel, stop).
+
+stats (Channel) ->
+  find_and_call (Channel, stats).
 
 %%====================================================================
 %% gen_server callbacks
@@ -111,11 +115,20 @@ handle_call ({ send, Packet },
              _From,
              State = #state {
                socket = Socket,
-               channel = #lwes_channel { ip = Ip, port = Port }
+               channel = #lwes_channel { ip = Ip, port = Port },
+               sent = Sent
              }) ->
   { reply,
     gen_udp:send (Socket, Ip, Port, Packet),
-    State };
+    State#state { sent = Sent + 1 }
+  };
+handle_call (stats,
+             _From,
+             State = #state {
+               sent = Sent,
+               received = Received
+             }) ->
+  { reply, {Sent, Received}, State };
 
 handle_call (Request, From, State) ->
   error_logger:warning_msg ("unrecognized call ~p from ~p~n",[Request, From]),
@@ -131,16 +144,18 @@ handle_cast (Request, State) ->
 handle_info ( {udp, _, _, _, _},
               State = #state {
                 type = listener,
-                callback = undefined
+                callback = undefined,
+                received = Received
               } ) ->
-  { noreply, State };
+  { noreply, State#state { received = Received + 1 } };
 
 handle_info ( Packet = {udp, _, _, _, _},
               State = #state {
                 type = listener,
                 callback = #callback { function = Function,
                                        format   = Format,
-                                       state    = CbState }
+                                       state    = CbState },
+                received = Received
               } ) ->
   Event =
     case Format of
@@ -151,7 +166,9 @@ handle_info ( Packet = {udp, _, _, _, _},
   { noreply,
     State#state { callback = #callback { function = Function,
                                          format   = Format,
-                                         state    = NewCbState } }
+                                         state    = NewCbState },
+                  received = Received + 1
+                }
   };
 
 handle_info ( Request, State) ->

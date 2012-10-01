@@ -102,15 +102,15 @@ from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
             { <<"SenderPort">>, SenderPort },
             { <<"ReceiptTime">>, millisecond_since_epoch () } ]);
       json ->
-        [ { <<"SenderIP">>,   ip2bin (SenderIP) },
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
       json_proplist ->
-        [ { <<"SenderIP">>,   ip2bin (SenderIP) },
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
       json_eep18 ->
-        [ { <<"SenderIP">>,   ip2bin (SenderIP) },
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
       _ ->
@@ -298,19 +298,19 @@ read_value (?LWES_TYPE_IP_ADDR, Bin, json) ->
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
     V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { ip2bin ({V4,V3,V2,V1}), Rest };
+  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
 read_value (?LWES_TYPE_IP_ADDR, Bin, json_proplist) ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
     V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { ip2bin ({V4,V3,V2,V1}), Rest };
+  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
 read_value (?LWES_TYPE_IP_ADDR, Bin, json_eep18) ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
     V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { ip2bin ({V4,V3,V2,V1}), Rest };
+  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
 read_value (?LWES_TYPE_IP_ADDR, Bin, _Format) ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
@@ -325,9 +325,6 @@ read_value (?LWES_TYPE_STRING, Bin, _Format) ->
   { V, Rest };
 read_value (_, _, _) ->
   throw (unknown_type).
-
-ip2bin (Ip) ->
-  list_to_binary(inet_parse:ntoa (Ip)).
 
 %%====================================================================
 %% Test functions

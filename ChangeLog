@@ -1,3 +1,8 @@
+Version 2.2.0 (molinaro)
+  * lwes_multi_emitter now supports randomly selecting groups to send to
+  * lwes_multi_emitter now supports groups (so nesting)
+  * send and receive stats are not collected and viewable
+
 Version 2.1.2 (molinaro)
   * hopefully last change, eep18 format should return a top-level tuple
 

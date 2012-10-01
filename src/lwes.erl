@@ -44,19 +44,71 @@
 -endif.
 
 %% API
--export ([ open/2,
+-export ([ start/0,
+           open/2,
            emit/2,
            listen/4,
-           close/1 ]).
+           close/1,
+           stats/0,
+           stats_raw/0 ]).
 
 %%====================================================================
 %% API functions
 %%====================================================================
+
+start () ->
+  application:start (lwes).
+
 %
 % open an lwes emitter, listener or set of emitters
 %
-% config for emitter/listener is {Ip, Port}
-% config for emitters is {M,[{Ip0,Port0},...,{IpN,PortN}]}
+% config for emitter/listener is
+%   { Ip, Port }
+% config for emitters (aka, multi emitter) is, default strategy is queue
+% for backward compatibility
+%   { NumberToSendToInThisGroup, [queue | random]
+%     [
+%       {Ip0,Port0},
+%       ...,
+%       {IpN,PortN}
+%     ]
+%   }
+% config for groups is
+%   { NumberOfGroupsToSendTo,
+%     group,
+%     [
+%       { NumberToSendToInThisGroup,
+%         Type,
+%         [
+%           {Ip0,Port0},
+%           ...
+%           {IpN,PortN}
+%         ]
+%       },
+%       ...
+%      ]
+%    }
+%  an example group emission might be
+%  { 2,
+%    group,
+%    [
+%      { 1,
+%        random,
+%        [ {Ip0, Port0},
+%          ...
+%          {IpN, PortN}
+%        ]
+%      },
+%      { 1,
+%        random,
+%        [ {IpN+1, PortN+1},
+%          ...
+%          {IpN+M, PortN+M}
+%        ]
+%      }
+%    ]
+%  }
+%  which should send each event to one machine in each group
 %
 open (emitters, Config) ->
   lwes_multi_emitter:open (Config);
@@ -123,6 +175,33 @@ close (Channel) when is_record (Channel, lwes_channel) ->
   lwes_channel:close (Channel);
 close (Channels) when is_record (Channels, lwes_multi_emitter) ->
   lwes_multi_emitter:close (Channels).
+
+stats () ->
+  case application:get_application (lwes) of
+    undefined -> {error, {not_started, lwes}};
+    _ ->
+      io:format ("~-21s ~-20s ~-20s~n",["channel", "sent", "received"]),
+      io:format ("~-21s ~-20s ~-20s~n",["---------------------",
+                                        "--------------------",
+                                        "--------------------"]),
+      [ io:format ("~-21s ~-20b ~-20b~n",
+          [ io_lib:format ("~s:~-5b",[lwes_util:ip2bin (Ip), Port]),
+            Sent, Received])
+        || {Ip, Port, Sent, Received }
+        <- lwes_channel_manager:stats () ],
+      ok
+  end.
+
+stats_raw () ->
+  case application:get_application (lwes) of
+    undefined -> {error, {not_started, lwes}};
+    _ ->
+      [ {lists:flatten (
+            io_lib:format ("~s:~-5b",[lwes_util:ip2bin (Ip), Port])),
+         Sent, Received }
+         || {Ip, Port, Sent, Received }
+        <- lwes_channel_manager:stats () ]
+  end.
 
 %%====================================================================
 %% Internal functions

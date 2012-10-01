@@ -9,6 +9,7 @@
 
 % API
 -export ([normalize_ip/1,
+          ip2bin/1,
           check_ip_port/1]).
 
 %%====================================================================
@@ -24,6 +25,9 @@ normalize_ip (Ip) when is_list (Ip) ->
 normalize_ip (_) ->
   % essentially turns function_clause error into badarg
   erlang:error (badarg).
+
+ip2bin (Ip) ->
+  list_to_binary(inet_parse:ntoa (Ip)).
 
 check_ip_port ({Ip, Port}) when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) ->
   {Ip, Port};
