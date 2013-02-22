@@ -18,6 +18,21 @@
          set_string/3,
          set_ip_addr/3,
          set_boolean/3,
+         set_byte/3,
+         set_float/3,
+         set_double/3,
+         set_uint16_array/3,
+         set_int16_array/3,
+         set_uint32_array/3,
+         set_int32_array/3,
+         set_uint64_array/3,
+         set_int64_array/3,
+         set_string_array/3,
+         set_ip_addr_array/3,
+         set_boolean_array/3,
+         set_byte_array/3,
+         set_float_array/3,
+         set_double_array/3,
          to_binary/1,
          from_udp_packet/2,
          from_binary/2,
@@ -70,6 +85,69 @@ set_ip_addr (E = #lwes_event { attrs = A}, K, V) ->
   E#lwes_event { attrs = [ { ?LWES_IP_ADDR, K, Ip } | A ] };
 set_ip_addr (_,_,_) ->
   erlang:error(badarg).
+set_byte(E = #lwes_event { attrs = A}, K, V) when ?is_byte (V) ->
+  E#lwes_event { attrs = [ { ?LWES_BYTE, K, V } | A ] };
+set_byte(_,_,_) ->
+  erlang:error(badarg).
+set_float(E = #lwes_event { attrs = A}, K, V) when is_float (V) ->
+  E#lwes_event { attrs = [ { ?LWES_FLOAT, K, V } | A ] };
+set_float(_,_,_) ->
+  erlang:error(badarg).
+set_double(E = #lwes_event { attrs = A}, K, V) when is_float (V) ->
+  E#lwes_event { attrs = [ { ?LWES_DOUBLE, K, V } | A ] };
+set_double(_,_,_) ->
+  erlang:error(badarg).
+set_uint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_U_INT_16_ARRAY, K, V } | A ] };
+set_uint16_array(_,_,_) ->
+  erlang:error(badarg).
+set_int16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_INT_16_ARRAY, K, V } | A ] };
+set_int16_array(_,_,_) ->
+  erlang:error(badarg).
+set_uint32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_U_INT_32_ARRAY, K, V } | A ] };
+set_uint32_array(_,_,_) ->
+  erlang:error(badarg).
+set_int32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_INT_32_ARRAY, K, V } | A ] };
+set_int32_array(_,_,_) ->
+  erlang:error(badarg).
+set_uint64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_U_INT_64_ARRAY, K, V } | A ] };
+set_uint64_array(_,_,_) ->
+  erlang:error(badarg).
+set_int64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_INT_64_ARRAY, K, V } | A ] };
+set_int64_array(_,_,_) ->
+  erlang:error(badarg).
+set_string_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_STRING_ARRAY, K, V } | A ] };
+set_string_array(_,_,_) ->
+  erlang:error(badarg).
+set_ip_addr_array (E = #lwes_event { attrs = A}, K, V)  when is_list (V) ->
+  Ips = [lwes_util:normalize_ip (I) || I <- V],
+  E#lwes_event { attrs = [ { ?LWES_IP_ADDR_ARRAY, K, Ips } | A ] };
+set_ip_addr_array(_,_,_) ->
+  erlang:error(badarg).
+set_boolean_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_BOOLEAN_ARRAY, K, V } | A ] };
+set_boolean_array(_,_,_) ->
+  erlang:error(badarg).
+set_byte_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_BYTE_ARRAY, K, V } | A ] };
+set_byte_array(_,_,_) ->
+  erlang:error(badarg).
+set_float_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_FLOAT_ARRAY, K, V } | A ] };
+set_float_array(_,_,_) ->
+  erlang:error(badarg).
+set_double_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_DOUBLE_ARRAY, K, V } | A ] };
+set_double_array(_,_,_) ->
+  erlang:error(badarg).
+
+
 
 to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   case Attrs of
@@ -187,10 +265,52 @@ write_attrs ([{K,V} | Rest], Accum) when ?is_uint64 (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_U_INT_64, V) | Accum ]);
 write_attrs ([{K,V} | Rest], Accum) when is_boolean (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_BOOLEAN, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_string (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_STRING, V) | Accum ]);
+write_attrs ([{K,V} | Rest], Accum) when is_list (V) ->
+  write_attrs (Rest, [ write_key (K), write (type_array (V), V) | Accum ]);
 write_attrs ([{K,V = {_,_,_,_}} | Rest], Accum) when ?is_ip_addr (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_IP_ADDR, V) | Accum ]).
+
+type_array (L)        -> type_array(L, undefined).
+type_array ([], Type) -> Type;
+type_array ([ H | T ], PrevType) ->
+  NewType = get_type (H),
+  case rank_type (NewType) > rank_type (PrevType) of
+    true ->
+      type_array (T, NewType);
+    _    ->
+      type_array (T, PrevType)
+  end.
+
+get_type (H) when is_boolean (H)  -> ?LWES_BOOLEAN_ARRAY;
+%% BYTE ARRAY IS INDISTINGUISHABLE FROM
+%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
+%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
+%% THEN USE THE THREE-TUPLE FORM.
+get_type (H) when ?is_string (H)  -> ?LWES_STRING_ARRAY;
+get_type (H) when ?is_byte (H)    -> ?LWES_STRING;
+get_type (H) when is_float (H)    -> ?LWES_FLOAT_ARRAY;
+get_type (H) when ?is_int16 (H)   -> ?LWES_INT_16_ARRAY;
+get_type (H) when ?is_uint16 (H)  -> ?LWES_U_INT_16_ARRAY;
+get_type (H) when ?is_int32 (H)   -> ?LWES_INT_32_ARRAY;
+get_type (H) when ?is_uint32 (H)  -> ?LWES_U_INT_32_ARRAY;
+get_type (H) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
+get_type (H) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
+get_type (H) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY.
+
+
+rank_type (undefined)       ->  0;
+rank_type (uint16_array)    ->  1;
+rank_type (int16_array)     ->  2;
+rank_type (uint32_array)    ->  3;
+rank_type (int32_array)     ->  4;
+rank_type (uint64_array)    ->  5;
+rank_type (int64_array)     ->  6;
+rank_type (boolean_array)   ->  7;
+rank_type (float_array)     ->  8;
+rank_type (double_array)    ->  9;
+rank_type (string_array)    -> 10;
+rank_type (string)          -> 11.
+
 
 write_key (Key) ->
   write_sized (1, 255, Key).
@@ -229,7 +349,134 @@ write (string, V) when is_list (V); is_binary (V) ->
           SL:16/integer-unsigned-big>>, V ];
     _ ->
       throw (string_too_big)
-  end.
+  end;
+write (byte, V) ->
+  <<?LWES_TYPE_BYTE:8/integer-unsigned-big, V:8/integer-unsigned-big>>;
+write (float, V) ->
+  <<?LWES_TYPE_FLOAT:8/integer-unsigned-big, V:32/float>>;
+write (double, V) ->
+  <<?LWES_TYPE_DOUBLE:8/integer-unsigned-big, V:64/float>>;
+write (uint16_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_uint16 (X) -> <<A/binary, X:16/integer-unsigned-big>>;
+    (_X, _A) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_U_INT_16_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (int16_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_int16 (X) -> <<A/binary, X:16/integer-signed-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_INT_16_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (uint32_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_uint32 (X) -> <<A/binary, X:32/integer-unsigned-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_U_INT_32_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (int32_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_int32 (X) -> <<A/binary, X:32/integer-signed-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_INT_32_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (uint64_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_uint64 (X) -> <<A/binary, X:64/integer-unsigned-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_U_INT_64_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (int64_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_int64 (X) -> <<A/binary, X:64/integer-signed-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_INT_64_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (string_array, V) ->
+  Len = length (V),
+  V1 = string_array_to_binary (V),
+  V2 = lists:foldl (
+  fun(X, A) ->
+      case iolist_size (X) of
+        SL when SL >= 0, SL =< 65535 ->
+            <<A/binary, SL:16/integer-unsigned-big, X/binary>>;
+        _ ->
+          throw (string_too_big)
+      end
+  end, <<>>, V1),
+  <<?LWES_TYPE_STRING_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (ip_addr_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_ip_addr (X) ->
+      {V1, V2, V3, V4} = X,
+      <<A/binary,
+        V4:8/integer-unsigned-big,
+        V3:8/integer-unsigned-big,
+        V2:8/integer-unsigned-big,
+        V1:8/integer-unsigned-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_IP_ADDR_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (boolean_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (true, A) -> <<A/binary, 1>>;
+    (false, A) -> <<A/binary, 0>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_BOOLEAN_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (byte_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when ?is_byte (X) -> <<A/binary, X:8/integer-signed-big>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_BYTE_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (float_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when is_float (X) -> <<A/binary, X:32/float>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_FLOAT_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (double_array, V) ->
+  Len = length (V),
+  V2 = lists:foldl (
+  fun
+    (X, A) when is_float (X) -> <<A/binary, X:64/float>>;
+    (_, _) -> erlang:error (badarg)
+  end, <<>>, V),
+  <<?LWES_TYPE_DOUBLE_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, V2/binary>>.
+
 
 read_name (Binary) ->
   <<Length:8/integer-unsigned-big,
@@ -323,8 +570,98 @@ read_value (?LWES_TYPE_BOOLEAN, Bin, _Format) ->
 read_value (?LWES_TYPE_STRING, Bin, _Format) ->
   <<SL:16/integer-unsigned-big, V:SL/binary, Rest/binary>> = Bin,
   { V, Rest };
+read_value (?LWES_TYPE_BYTE, Bin, _Format) ->
+  <<V:8/integer-unsigned-big, Rest/binary>> = Bin,
+  { V, Rest };
+read_value (?LWES_TYPE_FLOAT, Bin, _Format) ->
+  <<V:32/float, Rest/binary>> = Bin,
+  { V, Rest };
+read_value (?LWES_TYPE_DOUBLE, Bin, _Format) ->
+  <<V:64/float, Rest/binary>> = Bin,
+  { V, Rest };
+read_value (?LWES_TYPE_U_INT_16_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*16,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_U_INT_16, Ints, Format, []), Rest2 };
+read_value (?LWES_TYPE_INT_16_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*16,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_INT_16, Ints, Format, []), Rest2 };
+read_value (?LWES_TYPE_U_INT_32_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*32,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_U_INT_32, Ints, Format, []), Rest2 };
+read_value (?LWES_TYPE_INT_32_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*32,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_INT_32, Ints, Format,  []), Rest2 };
+read_value (?LWES_TYPE_U_INT_64_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*64,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_U_INT_64, Ints, Format, []), Rest2 };
+read_value (?LWES_TYPE_INT_64_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*64,
+  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_INT_64, Ints, Format, []), Rest2 };
+read_value (?LWES_TYPE_IP_ADDR_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*64,
+  <<Ips:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_IP_ADDR, Ips, Format, []), Rest2 };
+read_value (?LWES_TYPE_BOOLEAN_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*1,
+  <<Bools:Count/binary, Rest2/binary>> =  Rest,
+  { read_array (?LWES_TYPE_BOOLEAN, Bools, Format, []), Rest2 };
+read_value (?LWES_TYPE_STRING_ARRAY, Bin, _Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  read_string_array (AL, Rest, []);
+read_value (?LWES_TYPE_BYTE_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  <<Bytes:AL/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_BYTE, Bytes, Format, []), Rest2 };
+read_value (?LWES_TYPE_FLOAT_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*4,
+  <<Floats:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_FLOAT, Floats, Format, []), Rest2 };
+read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
+  <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
+  Count = AL*8,
+  <<Doubles:Count/binary, Rest2/binary>> = Rest,
+  { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
 read_value (_, _, _) ->
   throw (unknown_type).
+
+
+%% ARRAY TYPE FUNCS
+read_array (_Type, <<>>, _Format, Acc) -> lists:reverse (Acc);
+read_array (Type, Bin, Format, Acc) ->
+  { V, Rest } = read_value (Type, Bin, Format),
+  read_array (Type, Rest, Format, [V] ++ Acc).
+
+read_string_array (0, Bin, Acc) -> { lists:reverse (Acc), Bin };
+read_string_array (Count, Bin, Acc) ->
+  { V, Rest } = read_value (?LWES_TYPE_STRING, Bin, undefined),
+  read_string_array (Count-1, Rest, [V] ++ Acc).
+
+string_array_to_binary (L) -> string_array_to_binary (L, []).
+string_array_to_binary ([], Acc) -> lists:reverse (Acc);
+string_array_to_binary ([ H | T ], Acc) when is_binary (H) ->
+  string_array_to_binary (T, [H] ++ Acc);
+string_array_to_binary ([ H | T ], Acc) when is_list (H) ->
+  string_array_to_binary (T, [list_to_binary (H)] ++ Acc);
+string_array_to_binary ([ H | T ], Acc) when is_atom (H) ->
+  string_array_to_binary (T, [ list_to_binary (atom_to_list (H)) ] ++ Acc);
+string_array_to_binary (_, _) ->
+  erlang:error (badarg).
+
 
 %%====================================================================
 %% Test functions
