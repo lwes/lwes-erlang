@@ -3,10 +3,6 @@
 -include_lib ("lwes.hrl").
 -include_lib ("lwes_internal.hrl").
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export([new/1,
          set_uint16/3,
@@ -582,36 +578,36 @@ read_value (?LWES_TYPE_DOUBLE, Bin, _Format) ->
 read_value (?LWES_TYPE_U_INT_16_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*16,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_U_INT_16, Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_INT_16_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*16,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_INT_16, Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_U_INT_32_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*32,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_U_INT_32, Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_INT_32_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*32,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_INT_32, Ints, Format,  []), Rest2 };
 read_value (?LWES_TYPE_U_INT_64_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*64,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_U_INT_64, Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_INT_64_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*64,
-  <<Ints:Count/binary, Rest2/binary>> = Rest,
+  <<Ints:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_INT_64, Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_IP_ADDR_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
-  Count = AL*64,
+  Count = AL*4,
   <<Ips:Count/binary, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_IP_ADDR, Ips, Format, []), Rest2 };
 read_value (?LWES_TYPE_BOOLEAN_ARRAY, Bin, Format) ->
@@ -628,15 +624,15 @@ read_value (?LWES_TYPE_BYTE_ARRAY, Bin, Format) ->
   { read_array (?LWES_TYPE_BYTE, Bytes, Format, []), Rest2 };
 read_value (?LWES_TYPE_FLOAT_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
-  Count = AL*4,
-  <<Floats:Count/binary, Rest2/binary>> = Rest,
+  Count = AL*32,
+  <<Floats:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_FLOAT, Floats, Format, []), Rest2 };
 read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
-  Count = AL*8,
-  <<Doubles:Count/binary, Rest2/binary>> = Rest,
+  Count = AL*64,
+  <<Doubles:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
-read_value (_, _, _) ->
+read_value (Type, _, _) ->
   throw (unknown_type).
 
 
@@ -666,9 +662,10 @@ string_array_to_binary (_, _) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 
-new_test_ () ->
+new_test () ->
   [
     ?_assertEqual (#lwes_event { name = "foo", attrs = []}, new (foo)),
     ?_assertEqual (#lwes_event{name = "foo",attrs = [{int16,cat,-5}]},
@@ -680,5 +677,53 @@ new_test_ () ->
     ?_assertError (badarg,
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
   ].
+
+deserialize_test () ->
+  %% THIS IS A SERIALIZED PACKET
+  %% SENT FROM THE JAVA LIBRARY
+  %% THAT CONTAINS ALL TYPES
+  JavaPacket = {udp,port,
+                            {192,168,54,1},
+                            58206,
+                            <<4,84,101,115,116,0,25,3,101,110,99,2,0,1,15,84,
+                              101,115,116,83,116,114,105,110,103,65,114,114,
+                              97,121,133,0,3,0,3,102,111,111,0,3,98,97,114,0,
+                              3,98,97,122,11,102,108,111,97,116,95,97,114,114,
+                              97,121,139,0,4,61,204,204,205,62,76,204,205,62,
+                              153,153,154,62,204,204,205,8,84,101,115,116,66,
+                              111,111,108,9,0,9,84,101,115,116,73,110,116,51,
+                              50,4,0,0,54,176,10,84,101,115,116,68,111,117,98,
+                              108,101,12,63,191,132,253,32,0,0,0,9,84,101,115,
+                              116,73,110,116,54,52,7,0,0,0,0,0,0,12,162,10,84,
+                              101,115,116,85,73,110,116,49,54,1,0,10,9,84,101,
+                              115,116,70,108,111,97,116,11,61,250,120,108,15,
+                              84,101,115,116,85,73,110,116,51,50,65,114,114,
+                              97,121,131,0,3,0,0,48,34,1,239,43,17,0,20,6,67,
+                              14,84,101,115,116,73,110,116,51,50,65,114,114,
+                              97,121,132,0,3,0,0,0,123,0,0,177,110,0,0,134,29,
+                              13,84,101,115,116,73,80,65,100,100,114,101,115,
+                              115,6,1,0,0,127,10,84,101,115,116,85,73,110,116,
+                              51,50,3,0,3,139,151,14,84,101,115,116,73,110,
+                              116,54,52,65,114,114,97,121,135,0,3,0,0,0,0,0,0,
+                              48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,6,67,10,
+                              98,121,116,101,95,97,114,114,97,121,138,0,5,10,
+                              13,43,43,200,10,84,101,115,116,83,116,114,105,
+                              110,103,5,0,3,102,111,111,15,84,101,115,116,85,
+                              73,110,116,54,52,65,114,114,97,121,136,0,3,0,0,
+                              0,0,0,0,48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,
+                              6,67,15,84,101,115,116,85,73,110,116,49,54,65,
+                              114,114,97,121,129,0,3,0,123,177,110,134,29,6,
+                              100,111,117,98,108,101,140,0,3,64,94,206,217,32,
+                              0,0,0,64,94,199,227,64,0,0,0,64,69,170,206,160,
+                              0,0,0,9,66,111,111,108,65,114,114,97,121,137,0,
+                              4,1,0,0,1,14,84,101,115,116,73,110,116,49,54,65,
+                              114,114,97,121,130,0,4,0,10,0,23,0,23,0,43,4,98,
+                              121,116,101,10,20,10,84,101,115,116,85,73,110,
+                              116,54,52,8,0,0,0,0,0,187,223,3,18,84,101,115,
+                              116,73,80,65,100,100,114,101,115,115,65,114,114,
+                              97,121,134,0,4,1,1,168,129,2,1,168,129,3,1,168,
+                              129,4,1,168,129,9,84,101,115,116,73,110,116,49,
+                              54,2,0,20>>},
+  lwes_event:from_udp_packet(JavaPacket, json).
 
 -endif.
