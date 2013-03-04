@@ -632,7 +632,7 @@ read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
   Count = AL*64,
   <<Doubles:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
-read_value (Type, _, _) ->
+read_value (_, _, _) ->
   throw (unknown_type).
 
 
