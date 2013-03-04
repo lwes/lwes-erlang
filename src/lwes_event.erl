@@ -633,7 +633,6 @@ read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
   <<Doubles:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
 read_value (Type, _, _) ->
-  io:format("UNKNOWN ~p~n", [Type]),
   throw (unknown_type).
 
 
