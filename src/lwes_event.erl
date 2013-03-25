@@ -308,18 +308,17 @@ get_type (H) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
 get_type (H) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
 get_type (H) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY.
 
-
-rank_type (undefined)       ->  0;
-rank_type (uint16_array)    ->  1;
-rank_type (int16_array)     ->  2;
-rank_type (uint32_array)    ->  3;
-rank_type (int32_array)     ->  4;
-rank_type (uint64_array)    ->  5;
-rank_type (int64_array)     ->  6;
-rank_type (boolean_array)   ->  7;
-rank_type (double_array)    ->  8;
-rank_type (string_array)    ->  9;
-rank_type (string)          -> 10.
+rank_type (undefined)            ->  0;
+rank_type (?LWES_U_INT_16_ARRAY) ->  1;
+rank_type (?LWES_INT_16_ARRAY)   ->  2;
+rank_type (?LWES_U_INT_32_ARRAY) ->  3;
+rank_type (?LWES_INT_32_ARRAY)   ->  4;
+rank_type (?LWES_U_INT_64_ARRAY) ->  5;
+rank_type (?LWES_INT_64_ARRAY)   ->  6;
+rank_type (?LWES_BOOLEAN_ARRAY)  ->  7;
+rank_type (?LWES_DOUBLE_ARRAY)   ->  8;
+rank_type (?LWES_STRING_ARRAY)   ->  9;
+rank_type (?LWES_STRING)         -> 10.
 
 
 write_key (Key) ->
@@ -328,31 +327,31 @@ write_key (Key) ->
 write_name (Name) ->
   write_sized (1, 127, Name).
 
-write (uint16, V) ->
+write (?LWES_U_INT_16, V) ->
   <<?LWES_TYPE_U_INT_16:8/integer-unsigned-big, V:16/integer-unsigned-big>>;
-write (int16, V) ->
+write (?LWES_INT_16, V) ->
   <<?LWES_TYPE_INT_16:8/integer-unsigned-big, V:16/integer-signed-big>>;
-write (uint32, V) ->
+write (?LWES_U_INT_32, V) ->
   <<?LWES_TYPE_U_INT_32:8/integer-unsigned-big, V:32/integer-unsigned-big>>;
-write (int32, V) ->
+write (?LWES_INT_32, V) ->
   <<?LWES_TYPE_INT_32:8/integer-unsigned-big, V:32/integer-signed-big>>;
-write (uint64, V) ->
+write (?LWES_U_INT_64, V) ->
   <<?LWES_TYPE_U_INT_64:8/integer-unsigned-big, V:64/integer-unsigned-big>>;
-write (int64, V) ->
+write (?LWES_INT_64, V) ->
   <<?LWES_TYPE_INT_64:8/integer-unsigned-big, V:64/integer-signed-big>>;
-write (ip_addr, {V1, V2, V3, V4}) ->
+write (?LWES_IP_ADDR, {V1, V2, V3, V4}) ->
   <<?LWES_TYPE_IP_ADDR:8/integer-unsigned-big,
     V4:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V1:8/integer-unsigned-big>>;
-write (boolean, true) ->
+write (?LWES_BOOLEAN, true) ->
   <<?LWES_TYPE_BOOLEAN:8/integer-unsigned-big, 1>>;
-write (boolean, false) ->
+write (?LWES_BOOLEAN, false) ->
   <<?LWES_TYPE_BOOLEAN:8/integer-unsigned-big, 0>>;
-write (string, V) when is_atom (V) ->
-  write (string, atom_to_list (V));
-write (string, V) when is_list (V); is_binary (V) ->
+write (?LWES_STRING, V) when is_atom (V) ->
+  write (?LWES_STRING, atom_to_list (V));
+write (?LWES_STRING, V) when is_list (V); is_binary (V) ->
   case iolist_size (V) of
     SL when SL >= 0, SL =< 65535 ->
       [ <<?LWES_TYPE_STRING:8/integer-unsigned-big,
@@ -360,13 +359,13 @@ write (string, V) when is_list (V); is_binary (V) ->
     _ ->
       throw (string_too_big)
   end;
-write (byte, V) ->
+write (?LWES_BYTE, V) ->
   <<?LWES_TYPE_BYTE:8/integer-unsigned-big, V:8/integer-unsigned-big>>;
-write (float, V) ->
+write (?LWES_FLOAT, V) ->
   <<?LWES_TYPE_FLOAT:8/integer-unsigned-big, V:32/float>>;
-write (double, V) ->
+write (?LWES_DOUBLE, V) ->
   <<?LWES_TYPE_DOUBLE:8/integer-unsigned-big, V:64/float>>;
-write (uint16_array, V) ->
+write (?LWES_U_INT_16_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -375,7 +374,7 @@ write (uint16_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_U_INT_16_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (int16_array, V) ->
+write (?LWES_INT_16_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -384,7 +383,7 @@ write (int16_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_INT_16_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (uint32_array, V) ->
+write (?LWES_U_INT_32_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -393,7 +392,7 @@ write (uint32_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_U_INT_32_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (int32_array, V) ->
+write (?LWES_INT_32_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -402,7 +401,7 @@ write (int32_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_INT_32_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (uint64_array, V) ->
+write (?LWES_U_INT_64_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -411,7 +410,7 @@ write (uint64_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_U_INT_64_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (int64_array, V) ->
+write (?LWES_INT_64_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -420,7 +419,7 @@ write (int64_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_INT_64_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (string_array, V) ->
+write (?LWES_STRING_ARRAY, V) ->
   Len = length (V),
   V1 = string_array_to_binary (V),
   V2 = lists:foldl (
@@ -434,7 +433,7 @@ write (string_array, V) ->
   end, <<>>, V1),
   <<?LWES_TYPE_STRING_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (ip_addr_array, V) ->
+write (?LWES_IP_ADDR_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -449,7 +448,7 @@ write (ip_addr_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_IP_ADDR_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (boolean_array, V) ->
+write (?LWES_BOOLEAN_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -459,7 +458,7 @@ write (boolean_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_BOOLEAN_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (byte_array, V) ->
+write (?LWES_BYTE_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -468,7 +467,7 @@ write (byte_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_BYTE_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (float_array, V) ->
+write (?LWES_FLOAT_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -477,7 +476,7 @@ write (float_array, V) ->
   end, <<>>, V),
   <<?LWES_TYPE_FLOAT_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
-write (double_array, V) ->
+write (?LWES_DOUBLE_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
   fun
@@ -550,19 +549,8 @@ read_value (?LWES_TYPE_U_INT_64, Bin, _Format) ->
 read_value (?LWES_TYPE_INT_64, Bin, _Format) ->
   <<V:64/integer-signed-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_IP_ADDR, Bin, json) ->
-  <<V1:8/integer-unsigned-big,
-    V2:8/integer-unsigned-big,
-    V3:8/integer-unsigned-big,
-    V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
-read_value (?LWES_TYPE_IP_ADDR, Bin, json_proplist) ->
-  <<V1:8/integer-unsigned-big,
-    V2:8/integer-unsigned-big,
-    V3:8/integer-unsigned-big,
-    V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
-read_value (?LWES_TYPE_IP_ADDR, Bin, json_eep18) ->
+read_value (?LWES_TYPE_IP_ADDR, Bin, Format)
+  when Format =:= json; Format =:= json_proplist; Format =:= json_eep18  ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
