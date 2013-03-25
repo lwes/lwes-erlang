@@ -227,7 +227,22 @@ type_to_atom (?LWES_TYPE_U_INT_64) -> ?LWES_U_INT_64;
 type_to_atom (?LWES_TYPE_INT_64)   -> ?LWES_INT_64;
 type_to_atom (?LWES_TYPE_STRING)   -> ?LWES_STRING;
 type_to_atom (?LWES_TYPE_BOOLEAN)  -> ?LWES_BOOLEAN;
-type_to_atom (?LWES_TYPE_IP_ADDR)  -> ?LWES_IP_ADDR.
+type_to_atom (?LWES_TYPE_IP_ADDR)  -> ?LWES_IP_ADDR;
+type_to_atom (?LWES_TYPE_BYTE)     -> ?LWES_BYTE;
+type_to_atom (?LWES_TYPE_FLOAT)    -> ?LWES_FLOAT;
+type_to_atom (?LWES_TYPE_DOUBLE)   -> ?LWES_DOUBLE;
+type_to_atom (?LWES_TYPE_U_INT_16_ARRAY) -> ?LWES_U_INT_16_ARRAY;
+type_to_atom (?LWES_TYPE_INT_16_ARRAY)   -> ?LWES_INT_16_ARRAY;
+type_to_atom (?LWES_TYPE_U_INT_32_ARRAY) -> ?LWES_U_INT_32_ARRAY;
+type_to_atom (?LWES_TYPE_INT_32_ARRAY)   -> ?LWES_INT_32_ARRAY;
+type_to_atom (?LWES_TYPE_INT_64_ARRAY)   -> ?LWES_INT_64_ARRAY;
+type_to_atom (?LWES_TYPE_U_INT_64_ARRAY) -> ?LWES_U_INT_64_ARRAY;
+type_to_atom (?LWES_TYPE_STRING_ARRAY)   -> ?LWES_STRING_ARRAY;
+type_to_atom (?LWES_TYPE_IP_ADDR_ARRAY)  -> ?LWES_IP_ADDR_ARRAY;
+type_to_atom (?LWES_TYPE_BOOLEAN_ARRAY)  -> ?LWES_BOOLEAN_ARRAY;
+type_to_atom (?LWES_TYPE_BYTE_ARRAY)     -> ?LWES_BYTE_ARRAY;
+type_to_atom (?LWES_TYPE_FLOAT_ARRAY)    -> ?LWES_FLOAT_ARRAY;
+type_to_atom (?LWES_TYPE_DOUBLE_ARRAY)   -> ?LWES_DOUBLE_ARRAY.
 
 millisecond_since_epoch () ->
   {Meg, Sec, Mic} = os:timestamp(),
