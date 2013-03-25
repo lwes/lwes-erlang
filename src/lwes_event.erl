@@ -299,7 +299,7 @@ get_type (H) when is_boolean (H)  -> ?LWES_BOOLEAN_ARRAY;
 %% THEN USE THE THREE-TUPLE FORM.
 get_type (H) when ?is_string (H)  -> ?LWES_STRING_ARRAY;
 get_type (H) when ?is_byte (H)    -> ?LWES_STRING;
-get_type (H) when is_float (H)    -> ?LWES_FLOAT_ARRAY;
+get_type (H) when is_float (H)    -> ?LWES_DOUBLE_ARRAY;
 get_type (H) when ?is_int16 (H)   -> ?LWES_INT_16_ARRAY;
 get_type (H) when ?is_uint16 (H)  -> ?LWES_U_INT_16_ARRAY;
 get_type (H) when ?is_int32 (H)   -> ?LWES_INT_32_ARRAY;
@@ -317,10 +317,9 @@ rank_type (int32_array)     ->  4;
 rank_type (uint64_array)    ->  5;
 rank_type (int64_array)     ->  6;
 rank_type (boolean_array)   ->  7;
-rank_type (float_array)     ->  8;
-rank_type (double_array)    ->  9;
-rank_type (string_array)    -> 10;
-rank_type (string)          -> 11.
+rank_type (double_array)    ->  8;
+rank_type (string_array)    ->  9;
+rank_type (string)          -> 10.
 
 
 write_key (Key) ->
