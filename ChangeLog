@@ -1,3 +1,6 @@
+Version 2.3.0 (molinaro)
+  * added array types
+
 Version 2.2.0 (molinaro)
   * lwes_multi_emitter now supports randomly selecting groups to send to
   * lwes_multi_emitter now supports groups (so nesting)

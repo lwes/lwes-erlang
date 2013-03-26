@@ -1,6 +1,6 @@
 {application, lwes,
  [{description, "Light Weight Event System Erlang Bindings"},
-  {vsn, "2.2.0"},
+  {vsn, "2.3.0"},
   {modules, []},
   {registered, [lwes_channel_manager,lwes_channel_sup,lwes_sup]},
   {mod, {lwes_app, []}},
