@@ -10,7 +10,9 @@
 % API
 -export ([normalize_ip/1,
           ip2bin/1,
-          check_ip_port/1]).
+          check_ip_port/1,
+          ceiling/1,
+          count_ones/1]).
 
 %%====================================================================
 %% API functions
@@ -40,6 +42,20 @@ check_ip_port (_) ->
   % essentially turns function_clause error into badarg
   erlang:error (badarg).
 
+ceiling(X) when X < 0 ->
+    trunc(X);
+ceiling(X) ->
+    T = trunc(X),
+    case X - T == 0 of
+        true  -> T;
+        false -> T + 1
+    end.
+
+count_ones(Bin) -> count_ones(Bin, 0).
+count_ones(<<>>, Counter) -> Counter;
+count_ones(<<X:1, Rest/bitstring>>, Counter) ->
+  count_ones(Rest, Counter + X).
+
 %%====================================================================
 %% Test functions
 %%====================================================================
@@ -57,5 +73,9 @@ check_ip_port_test () ->
   ?assertError (badarg, check_ip_port ({"655.0.0.1",9191})),
   ?assertError (badarg, check_ip_port ({{655,0,0,1},9191})),
   ?assertError (badarg, check_ip_port ({{127,0,0,1},91919})).
+
+ceil_test () ->
+  ?assertEqual(8, ceiling(7.5)),
+  ?assertEqual(-10, ceiling(-10.9)).
 
 -endif.
