@@ -29,6 +29,17 @@
          set_byte_array/3,
          set_float_array/3,
          set_double_array/3,
+         set_nuint16_array/3,
+         set_nint16_array/3,
+         set_nuint32_array/3,
+         set_nint32_array/3,
+         set_nuint64_array/3,
+         set_nint64_array/3,
+         set_nstring_array/3,
+         set_nboolean_array/3,
+         set_nbyte_array/3,
+         set_nfloat_array/3,
+         set_ndouble_array/3,
          to_binary/1,
          from_udp_packet/2,
          from_binary/2,
@@ -141,6 +152,50 @@ set_float_array(_,_,_) ->
 set_double_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
   E#lwes_event { attrs = [ { ?LWES_DOUBLE_ARRAY, K, V } | A ] };
 set_double_array(_,_,_) ->
+  erlang:error(badarg).
+set_nuint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_16_ARRAY, K, V } | A ] };
+set_nuint16_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_16_ARRAY, K, V } | A ] };
+set_nint16_array(_,_,_) ->
+  erlang:error(badarg).
+set_nuint32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_32_ARRAY, K, V } | A ] };
+set_nuint32_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_32_ARRAY, K, V } | A ] };
+set_nint32_array(_,_,_) ->
+  erlang:error(badarg).
+set_nuint64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_64_ARRAY, K, V } | A ] };
+set_nuint64_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_64_ARRAY, K, V } | A ] };
+set_nint64_array(_,_,_) ->
+  erlang:error(badarg).
+set_nstring_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_STRING_ARRAY, K, V } | A ] };
+set_nstring_array(_,_,_) ->
+  erlang:error(badarg).
+set_nboolean_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_BOOLEAN_ARRAY, K, V } | A ] };
+set_nboolean_array(_,_,_) ->
+  erlang:error(badarg).
+set_nbyte_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_BYTE_ARRAY, K, V } | A ] };
+set_nbyte_array(_,_,_) ->
+  erlang:error(badarg).
+set_nfloat_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_FLOAT_ARRAY, K, V } | A ] };
+set_nfloat_array(_,_,_) ->
+  erlang:error(badarg).
+set_ndouble_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_DOUBLE_ARRAY, K, V } | A ] };
+set_ndouble_array(_,_,_) ->
   erlang:error(badarg).
 
 
