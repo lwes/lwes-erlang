@@ -641,7 +641,7 @@ write (?LWES_N_BOOLEAN_ARRAY, V) ->
       (true, {BitAccum, DataAccum}) -> {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, 1>>};
       (false,{BitAccum, DataAccum}) -> {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, 0>>};
       (_, _) -> erlang:error (badarg)
-    end, <<>>, V),
+    end, {<<>>, <<>>}, V),
   Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
   <<?LWES_TYPE_N_BOOLEAN_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
@@ -677,7 +677,7 @@ write (?LWES_N_DOUBLE_ARRAY, V) ->
   {Bitset, Data} = lists:foldl (
   fun
     (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum})  -> 
+    (X, {BitAccum, DataAccum}) when is_float(X) -> 
             {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:64/float>>};
     (_, _) -> erlang:error (badarg)
   end, {<<>>, <<>>}, V),
@@ -693,8 +693,8 @@ write (?LWES_N_STRING_ARRAY, V) ->
       (X, {BitAccum, DataAccum}) -> 
       case iolist_size (X) of
         SL when SL >= 0, SL =< 65535 ->
-            {<<0:1, BitAccum/bitstring>>, 
-            <<DataAccum/binary, SL:16/integer-unsigned-big, DataAccum/binary>>};
+            {<<1:1, BitAccum/bitstring>>, 
+            <<DataAccum/binary, SL:16/integer-unsigned-big, X/binary>>};
         _ ->
           throw (string_too_big)
       end
@@ -978,6 +978,41 @@ new_test () ->
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,5)),
     ?_assertError (badarg,
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
+  ].
+
+set_nullable_array_test() ->
+  [
+    ?_assertEqual (#lwes_event {name = "foo", 
+                              attrs = [{nint16_array, key1, [1, -1, undefined, 3, undefined, -4]}]},
+                    lwes_event:set_nint16_array(lwes_event:new(foo), 
+                      key1, [1, -1, undefined, 3, undefined, -4])
+                    )
+  ].
+
+write_nullable_arrays_test() ->
+  [
+    ?assertEqual(write(nuint16_array, [3, undefined, undefined, 500, 10]), 
+                  <<141,0,5,0,5,25,0,3,1,244,0,10>>),
+    ?assertEqual(write(nint16_array, [undefined, -1, undefined, -500, 10]), 
+                  <<142,0,5,0,5,26,255,255,254,12,0,10>>),
+    ?assertEqual(write(nuint32_array, [3, undefined, undefined, 500, 10]), 
+                  <<143,0,5,0,5,25,0,0,0,3,0,0,1,244,0,0,0,10>>),
+    ?assertEqual(write(nint32_array, [undefined, -1, undefined, -500, 10]), 
+                  <<144,0,5,0,5,26,255,255,255,255,255,255,254,12,0,0,0,10>>),
+    ?assertEqual(write(nuint64_array, [3, 1844674407370955161, undefined, 10]), 
+                  <<148,0,4,0,4,11,0,0,0,0,0,0,0,3,25,153,153,153,153,153,153,153,0,0,0,0,0,0,0,10>>),
+    ?assertEqual(write(nint64_array, [undefined, undefined, -72036854775808]), 
+                  <<147,0,3,0,3,4,255,255,190,123,156,220,64,0>>),
+    ?assertEqual(write(nboolean_array, [true, false, undefined, true, true, false]), 
+                  <<149,0,6,0,6,59,1,0,1,1,0>>),
+    ?assertEqual(write(nbyte_array, [undefined, undefined, undefined, 23, 72, 9]), 
+                  <<150,0,6,0,6,56,23,72,9>>),
+    ?assertEqual(write(nfloat_array, [undefined, -2.1232, undefined, 2.25]), 
+                  <<151,0,4,0,4,10,192,7,226,130,64,16,0,0>>),
+    ?assertEqual(write(ndouble_array, [undefined, -2.1232, undefined, 2.25]), 
+                  <<152,0,4,0,4,10,192,0,252,80,72,22,240,7,64,2,0,0,0,0,0,0>>),
+    ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
+                  <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>)
   ].
 
 deserialize_test () ->
