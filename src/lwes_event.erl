@@ -274,6 +274,12 @@ from_binary (Binary, Format, Accum0) ->
       #lwes_event { name = EventName, attrs = AttrList }
   end.
 
+split_bounds(Index, Bitset) ->
+  Size = size(Bitset) * 8,
+  L = Size - Index, 
+  R = Index - 1, 
+  {L, R}.
+
 lwes_bitset_rep (Len, Bitset) ->
   Padding = (lwes_util:ceiling(Len/8) * 8) - Len, 
   Bitset_Bin = <<0:Padding, Bitset/bitstring>>,
@@ -286,7 +292,7 @@ reverse_bytes_in_bin (Bitset) ->
 
 decode_bitset(AL, Bin) ->
   Bitset_Length = lwes_util:ceiling( AL/8 ) * 8, 
-  <<Bitset:Bitset_Length, _>> = Bin,
+  <<Bitset:Bitset_Length/bitstring, _/bitstring>> = Bin,
   {lwes_util:count_ones(Bitset), Bitset_Length, reverse_bytes_in_bin(Bitset)}.
 
 type_to_atom (?LWES_TYPE_U_INT_16) -> ?LWES_U_INT_16;
@@ -857,65 +863,65 @@ read_value (?LWES_TYPE_N_U_INT_16_ARRAY, Bin, Format) ->
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 16 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_16, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_U_INT_16, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_INT_16_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 16 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_16, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_INT_16, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_U_INT_32_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 32 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_32, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_U_INT_32, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_INT_32_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 32 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_32, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_INT_32, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_U_INT_64_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 64 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_64, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_U_INT_64, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_INT_64_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 64 ,
   <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_64, Bitset ,Ints, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_INT_64, AL, 1, Bitset ,Ints, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 1,
+  Count = Not_Null_Count * 8,
   <<_:Bitset_Length, Bools:Count/bits, Rest2/binary>> =  Rest,
-  { read_n_array (?LWES_TYPE_BOOLEAN, Bitset, Bools, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_BOOLEAN, AL, 1, Bitset, Bools, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_STRING_ARRAY, Bin, _) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   <<_:Bitset_Length, Rest2/binary>> = Rest,
-  read_n_string_array (Bitset, Rest2, []);
+  read_n_string_array (AL, 1, Bitset, Rest2, []);
 read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   <<_:Bitset_Length, Bytes:Not_Null_Count/binary, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_BYTE, Bitset, Bytes, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_BYTE, AL, 1, Bitset, Bytes, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_FLOAT_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 32,
   <<_:Bitset_Length, Floats:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_FLOAT, Bitset, Floats, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_FLOAT, AL, 1, Bitset, Floats, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_DOUBLE_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   Count = Not_Null_Count * 64,
   <<_:Bitset_Length, Doubles:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_DOUBLE, Bitset, Doubles, Format, []), Rest2 };
+  { read_n_array (?LWES_TYPE_DOUBLE, AL, 1, Bitset, Doubles, Format, []), Rest2 };
 read_value (_, _, _) ->
   throw (unknown_type).
 
@@ -926,24 +932,28 @@ read_array (Type, Bin, Format, Acc) ->
   { V, Rest } = read_value (Type, Bin, Format),
   read_array (Type, Rest, Format, [V] ++ Acc).
 
-read_n_array (_Type, A, B, _Format, Acc) when A =:= <<>> ; B =:= <<>> -> lists:reverse (Acc);
-read_n_array (Type, <<Rest_Bitset, X:1>>, Bin, Format, Acc) ->
+read_n_array (_Type, Count, Index, _Bitset, _Bin, _Format, Acc) when Index > Count -> lists:reverse (Acc);
+read_n_array (Type, Count, Index, Bitset, Bin, Format, Acc) when Index =< Count ->
+  {L, R} = split_bounds(Index, Bitset),
+  << _:L/bits, X:1, _:R/bits >> = Bitset,
   { V, Rest } = case X of 0 -> {undefined, Bin};
                           1 -> read_value (Type, Bin, Format)
                 end,
-  read_n_array (Type, Rest_Bitset, Rest, Format, [V] ++ Acc).
+  read_n_array (Type, Count, Index + 1, Bitset, Rest, Format, [V] ++ Acc).
 
 read_string_array (0, Bin, Acc) -> { lists:reverse (Acc), Bin };
 read_string_array (Count, Bin, Acc) ->
   { V, Rest } = read_value (?LWES_TYPE_STRING, Bin, undefined),
   read_string_array (Count-1, Rest, [V] ++ Acc).
 
-read_n_string_array (<<>>, Bin, Acc) -> { lists:reverse (Acc), Bin };
-read_n_string_array (<<Rest_Bitset, X:1>>, Bin, Acc) ->
+read_n_string_array (Count, Index, _Bitset, Bin, Acc) when Index > Count -> { lists:reverse (Acc), Bin };
+read_n_string_array (Count, Index, Bitset, Bin, Acc) when Index =< Count ->
+  {L, R} = split_bounds(Index, Bitset),
+  << _:L/bits, X:1, _:R/bits >> = Bitset,
   { V, Rest } = case X of 0 -> {undefined, Bin};
                           1 -> read_value (?LWES_TYPE_STRING, Bin, undefined)
                 end,
-  read_n_string_array (Rest_Bitset, Rest, [V] ++ Acc).
+  read_n_string_array (Count, Index + 1,Bitset, Rest, [V] ++ Acc).
 
 string_array_to_binary (L) -> string_array_to_binary (L, []).
 string_array_to_binary ([], Acc) -> lists:reverse (Acc);
@@ -1014,6 +1024,51 @@ write_nullable_arrays_test() ->
     ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
                   <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>)
   ].
+
+read_nullable_arrays_test() ->
+  [
+    ?assertEqual({[3, undefined, undefined, 500, 10], <<>>}, 
+                  read_value(?LWES_TYPE_N_U_INT_16_ARRAY, <<0,5,0,5,25,0,3,1,244,0,10>>, 0)), 
+
+    ?assertEqual({[undefined, -1, undefined, -500, 10], <<>>}, 
+                  read_value(?LWES_TYPE_N_INT_16_ARRAY, 
+                    <<0,5,0,5,26,255,255,254,12,0,10>>, 0)),
+
+    ?assertEqual({[3, undefined, undefined, 500, 10], <<>>}, 
+                  read_value(?LWES_TYPE_N_U_INT_32_ARRAY, 
+                    <<0,5,0,5,25,0,0,0,3,0,0,1,244,0,0,0,10>>, 0)),
+
+    ?assertEqual({[undefined, -1, undefined, -500, 10], <<>>}, 
+                  read_value(?LWES_TYPE_N_INT_32_ARRAY, 
+                    <<0,5,0,5,26,255,255,255,255,255,255,254,12,0,0,0,10>>, 0)),
+
+    ?assertEqual({[3, 1844674407370955161, undefined, 10], <<>>}, 
+                  read_value(?LWES_TYPE_N_U_INT_64_ARRAY,
+                    <<0,4,0,4,11,0,0,0,0,0,0,0,3,25,153,153,153,153,153,153,153,0,0,0,0,0,0,0,10>>, 0)),
+
+    ?assertEqual({[undefined, undefined, -72036854775808], <<>>}, 
+                  read_value(?LWES_TYPE_N_INT_64_ARRAY,
+                    <<0,3,0,3,4,255,255,190,123,156,220,64,0>>, 0)),
+
+    ?assertEqual({[true, false, undefined, true, true, false], <<>>}, 
+                  read_value(?LWES_TYPE_N_BOOLEAN_ARRAY, 
+                    <<0,6,0,6,59,1,0,1,1,0>>, 0)),
+
+    ?assertEqual({[undefined, undefined, undefined, 23, 72, 9], <<>>}, 
+                  read_value(?LWES_TYPE_N_BYTE_ARRAY, <<0,6,0,6,56,23,72,9>>, 0)),
+
+    ?assertEqual({[undefined, -2.25, undefined, 2.25], <<>>}, 
+                  read_value(?LWES_TYPE_N_FLOAT_ARRAY, <<0,4,0,4,10,192,16,0,0,64,16,0,0>>, 0)),
+
+    ?assertEqual({[undefined, -2.25, undefined, 2.25], <<>>}, 
+                  read_value(?LWES_TYPE_N_DOUBLE_ARRAY, 
+                    <<0,4,0,4,10,192,2,0,0,0,0,0,0,64,2,0,0,0,0,0,0>>, 0)), 
+
+    ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
+                  read_value(?LWES_TYPE_N_STRING_ARRAY,
+                    <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
+  ].
+
 
 deserialize_test () ->
   %% THIS IS A SERIALIZED PACKET

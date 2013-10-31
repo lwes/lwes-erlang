@@ -78,4 +78,8 @@ ceil_test () ->
   ?assertEqual(8, ceiling(7.5)),
   ?assertEqual(-10, ceiling(-10.9)).
 
+count_ones_test () ->
+  [?assertEqual(7, count_ones(27218)),
+  ?assertEqual(0, ceiling(0))].
+
 -endif.
