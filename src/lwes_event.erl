@@ -64,8 +64,8 @@
     <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
     {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
     Count = Not_Null_Count * ElementSize,
-    <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-    { read_n_array (LwesType, AL, 1, Bitset ,Ints, Format, []), Rest2 }).
+    <<_:Bitset_Length, Values:Count/bits, Rest2/binary>> = Rest,
+    { read_n_array (LwesType, AL, 1, Bitset ,Values, Format, []), Rest2 }).
 
 %%====================================================================
 %% API
@@ -303,9 +303,9 @@ split_bounds(Index, Bitset) ->
   {L, R}.
 
 lwes_bitset_rep (Len, Bitset) ->
-  Padding = (lwes_util:ceiling(Len/8) * 8) - Len, 
+  Padding = (erlang:byte_size(Bitset) * 8) - Len, 
   Bitset_Bin = <<0:Padding, Bitset/bitstring>>,
-  reverse_bytes_in_bin(Bitset_Bin).
+    reverse_bytes_in_bin(Bitset_Bin).
 
 reverse_bytes_in_bin (Bitset) ->
   binary:list_to_bin(
@@ -892,13 +892,12 @@ set_nullable_array_test() ->
                     )
   ].
 
-assert_read_write(Type, Type_Id, Arr) ->
-  W = write(Type, Arr),
-  <<_:8/bits, Data/binary>> = W,
-  ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0)).
-
-write_list_test() ->
-  [ assert_read_write(Type, Type_Id, Arr)
+write_read_nullarrays_test() ->
+  [ begin
+      W = write(Type, Arr),
+      <<_:8/bits, Data/binary>> = W,
+      ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0))
+    end
       || {Type, Type_Id, Arr} <- 
            [{nuint16_array, 141, [3, undefined, undefined, 500, 10]},
             {nint16_array, 142, [undefined, -1, undefined, -500, 10]},
@@ -910,16 +909,13 @@ write_list_test() ->
             {nbyte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
             {nfloat_array, 151, [undefined, -2.25, undefined, 2.25]}, 
             {ndouble_array, 152, [undefined, undefined, -1.25, 2.25]},
-            {nstring_array, 145, [undefined, "test", "should ", "pass"]}]].
+            {nstring_array, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}]].
 
-write_nullable_arrays_test() ->
+string_nullable_arrays_test() ->
   [
     ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
-                  <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>)
-  ].
+                  <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>),
 
-read_nullable_arrays_test() ->
-  [  
     ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
                   read_value(?LWES_TYPE_N_STRING_ARRAY,
                     <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
