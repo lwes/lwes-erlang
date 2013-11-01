@@ -45,6 +45,28 @@
          from_binary/2,
          peek_name_from_udp/1]).
 
+-define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
+   Len = length (V),
+   {Bitset, Data} = lists:foldl (
+       fun
+         (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
+         (X, {BitAccum, DataAccum}) when Guard (X) ->
+           {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:BinarySize/BinaryType>>};
+         (_, _) -> erlang:error (badarg)
+       end, {<<>>, <<>>}, V),
+    Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
+    <<LwesType:8/integer-unsigned-big,
+      Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
+      Lwes_Bitset_Bin/binary, Data/binary>>
+    ).
+
+-define (read_nullable_array (Bin, LwesType, ElementSize), 
+    <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
+    {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
+    Count = Not_Null_Count * ElementSize,
+    <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
+    { read_n_array (LwesType, AL, 1, Bitset ,Ints, Format, []), Rest2 }).
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -562,83 +584,32 @@ write (?LWES_DOUBLE_ARRAY, V) ->
   <<?LWES_TYPE_DOUBLE_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, V2/binary>>;
 write (?LWES_N_U_INT_16_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_uint16 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:16/integer-unsigned-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_U_INT_16_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_16_ARRAY,
+                          ?is_uint16, 16, integer-unsigned-big, V);
 write (?LWES_N_INT_16_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_int16 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:16/integer-signed-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_INT_16_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_INT_16_ARRAY,
+                          ?is_int16, 16, integer-signed-big, V);
 write (?LWES_N_U_INT_32_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_uint32 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:32/integer-unsigned-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_U_INT_32_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_32_ARRAY,
+                          ?is_uint32, 32, integer-unsigned-big, V);
 write (?LWES_N_INT_32_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_int32 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:32/integer-signed-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_INT_32_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_INT_32_ARRAY,
+                          ?is_int32, 32, integer-signed-big, V);
 write (?LWES_N_U_INT_64_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_uint64 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:64/integer-unsigned-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_U_INT_64_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_64_ARRAY,
+                          ?is_uint64, 64, integer-unsigned-big, V);
 write (?LWES_N_INT_64_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_int64 (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:64/integer-signed-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_INT_64_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+  ?write_nullable_array(?LWES_TYPE_N_INT_64_ARRAY,
+                          ?is_int64, 64, integer-signed-big, V);
+write (?LWES_N_BYTE_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_BYTE_ARRAY,
+                          ?is_byte, 8, integer-signed-big, V);
+write (?LWES_N_FLOAT_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_FLOAT_ARRAY,
+                          is_float, 32, float, V);
+write (?LWES_N_DOUBLE_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_DOUBLE_ARRAY,
+                          is_float, 64, float, V);
 write (?LWES_N_BOOLEAN_ARRAY, V) ->
   Len = length (V),
   {Bitset, Data} = lists:foldl (
@@ -650,45 +621,6 @@ write (?LWES_N_BOOLEAN_ARRAY, V) ->
     end, {<<>>, <<>>}, V),
   Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
   <<?LWES_TYPE_N_BOOLEAN_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
-write (?LWES_N_BYTE_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when ?is_byte (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:8/integer-signed-big>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_BYTE_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
-write (?LWES_N_FLOAT_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when is_float (X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:32/float>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_FLOAT_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
-write (?LWES_N_DOUBLE_ARRAY, V) ->
-  Len = length (V),
-  {Bitset, Data} = lists:foldl (
-  fun
-    (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-    (X, {BitAccum, DataAccum}) when is_float(X) -> 
-            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:64/float>>};
-    (_, _) -> erlang:error (badarg)
-  end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
-  <<?LWES_TYPE_N_DOUBLE_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
     Lwes_Bitset_Bin/binary, Data/binary>>;
 write (?LWES_N_STRING_ARRAY, V) ->
@@ -859,69 +791,30 @@ read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
   <<Doubles:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
 read_value (?LWES_TYPE_N_U_INT_16_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 16 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_16, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_16, 16);
 read_value (?LWES_TYPE_N_INT_16_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 16 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_16, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_16, 16);
 read_value (?LWES_TYPE_N_U_INT_32_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 32 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_32, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_32, 32);
 read_value (?LWES_TYPE_N_INT_32_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 32 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_32, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_32, 32);
 read_value (?LWES_TYPE_N_U_INT_64_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 64 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_U_INT_64, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_64, 64);
 read_value (?LWES_TYPE_N_INT_64_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 64 ,
-  <<_:Bitset_Length, Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_INT_64, AL, 1, Bitset ,Ints, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_64, 64);
 read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 8,
-  <<_:Bitset_Length, Bools:Count/bits, Rest2/binary>> =  Rest,
-  { read_n_array (?LWES_TYPE_BOOLEAN, AL, 1, Bitset, Bools, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_BOOLEAN, 8);
 read_value (?LWES_TYPE_N_STRING_ARRAY, Bin, _) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
   {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
   <<_:Bitset_Length, Rest2/binary>> = Rest,
   read_n_string_array (AL, 1, Bitset, Rest2, []);
 read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  <<_:Bitset_Length, Bytes:Not_Null_Count/binary, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_BYTE, AL, 1, Bitset, Bytes, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_BYTE, 8);
 read_value (?LWES_TYPE_N_FLOAT_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 32,
-  <<_:Bitset_Length, Floats:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_FLOAT, AL, 1, Bitset, Floats, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_FLOAT, 32);
 read_value (?LWES_TYPE_N_DOUBLE_ARRAY, Bin, Format) ->
-  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-  Count = Not_Null_Count * 64,
-  <<_:Bitset_Length, Doubles:Count/bits, Rest2/binary>> = Rest,
-  { read_n_array (?LWES_TYPE_DOUBLE, AL, 1, Bitset, Doubles, Format, []), Rest2 };
+  ?read_nullable_array(Bin, ?LWES_TYPE_DOUBLE, 64);
 read_value (_, _, _) ->
   throw (unknown_type).
 
@@ -999,76 +892,38 @@ set_nullable_array_test() ->
                     )
   ].
 
+assert_read_write(Type, Type_Id, Arr) ->
+  W = write(Type, Arr),
+  <<_:8/bits, Data/binary>> = W,
+  ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0)).
+
+write_list_test() ->
+  [ assert_read_write(Type, Type_Id, Arr)
+      || {Type, Type_Id, Arr} <- 
+           [{nuint16_array, 141, [3, undefined, undefined, 500, 10]},
+            {nint16_array, 142, [undefined, -1, undefined, -500, 10]},
+            {nuint32_array, 143, [3, undefined, undefined, 500, 10]}, 
+            {nint32_array, 144, [undefined, -1, undefined, -500, 10]},
+            {nuint64_array, 148, [3, 1844674407370955161, undefined, 10]},
+            {nint64_array, 147, [undefined, undefined, -72036854775808]}, 
+            {nboolean_array, 149, [true, false, undefined, true, true, false]},
+            {nbyte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
+            {nfloat_array, 151, [undefined, -2.25, undefined, 2.25]}, 
+            {ndouble_array, 152, [undefined, undefined, -1.25, 2.25]},
+            {nstring_array, 145, [undefined, "test", "should ", "pass"]}]].
+
 write_nullable_arrays_test() ->
   [
-    ?assertEqual(write(nuint16_array, [3, undefined, undefined, 500, 10]), 
-                  <<141,0,5,0,5,25,0,3,1,244,0,10>>),
-    ?assertEqual(write(nint16_array, [undefined, -1, undefined, -500, 10]), 
-                  <<142,0,5,0,5,26,255,255,254,12,0,10>>),
-    ?assertEqual(write(nuint32_array, [3, undefined, undefined, 500, 10]), 
-                  <<143,0,5,0,5,25,0,0,0,3,0,0,1,244,0,0,0,10>>),
-    ?assertEqual(write(nint32_array, [undefined, -1, undefined, -500, 10]), 
-                  <<144,0,5,0,5,26,255,255,255,255,255,255,254,12,0,0,0,10>>),
-    ?assertEqual(write(nuint64_array, [3, 1844674407370955161, undefined, 10]), 
-                  <<148,0,4,0,4,11,0,0,0,0,0,0,0,3,25,153,153,153,153,153,153,153,0,0,0,0,0,0,0,10>>),
-    ?assertEqual(write(nint64_array, [undefined, undefined, -72036854775808]), 
-                  <<147,0,3,0,3,4,255,255,190,123,156,220,64,0>>),
-    ?assertEqual(write(nboolean_array, [true, false, undefined, true, true, false]), 
-                  <<149,0,6,0,6,59,1,0,1,1,0>>),
-    ?assertEqual(write(nbyte_array, [undefined, undefined, undefined, 23, 72, 9]), 
-                  <<150,0,6,0,6,56,23,72,9>>),
-    ?assertEqual(write(nfloat_array, [undefined, -2.1232, undefined, 2.25]), 
-                  <<151,0,4,0,4,10,192,7,226,130,64,16,0,0>>),
-    ?assertEqual(write(ndouble_array, [undefined, -2.1232, undefined, 2.25]), 
-                  <<152,0,4,0,4,10,192,0,252,80,72,22,240,7,64,2,0,0,0,0,0,0>>),
     ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
                   <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>)
   ].
 
 read_nullable_arrays_test() ->
-  [
-    ?assertEqual({[3, undefined, undefined, 500, 10], <<>>}, 
-                  read_value(?LWES_TYPE_N_U_INT_16_ARRAY, <<0,5,0,5,25,0,3,1,244,0,10>>, 0)), 
-
-    ?assertEqual({[undefined, -1, undefined, -500, 10], <<>>}, 
-                  read_value(?LWES_TYPE_N_INT_16_ARRAY, 
-                    <<0,5,0,5,26,255,255,254,12,0,10>>, 0)),
-
-    ?assertEqual({[3, undefined, undefined, 500, 10], <<>>}, 
-                  read_value(?LWES_TYPE_N_U_INT_32_ARRAY, 
-                    <<0,5,0,5,25,0,0,0,3,0,0,1,244,0,0,0,10>>, 0)),
-
-    ?assertEqual({[undefined, -1, undefined, -500, 10], <<>>}, 
-                  read_value(?LWES_TYPE_N_INT_32_ARRAY, 
-                    <<0,5,0,5,26,255,255,255,255,255,255,254,12,0,0,0,10>>, 0)),
-
-    ?assertEqual({[3, 1844674407370955161, undefined, 10], <<>>}, 
-                  read_value(?LWES_TYPE_N_U_INT_64_ARRAY,
-                    <<0,4,0,4,11,0,0,0,0,0,0,0,3,25,153,153,153,153,153,153,153,0,0,0,0,0,0,0,10>>, 0)),
-
-    ?assertEqual({[undefined, undefined, -72036854775808], <<>>}, 
-                  read_value(?LWES_TYPE_N_INT_64_ARRAY,
-                    <<0,3,0,3,4,255,255,190,123,156,220,64,0>>, 0)),
-
-    ?assertEqual({[true, false, undefined, true, true, false], <<>>}, 
-                  read_value(?LWES_TYPE_N_BOOLEAN_ARRAY, 
-                    <<0,6,0,6,59,1,0,1,1,0>>, 0)),
-
-    ?assertEqual({[undefined, undefined, undefined, 23, 72, 9], <<>>}, 
-                  read_value(?LWES_TYPE_N_BYTE_ARRAY, <<0,6,0,6,56,23,72,9>>, 0)),
-
-    ?assertEqual({[undefined, -2.25, undefined, 2.25], <<>>}, 
-                  read_value(?LWES_TYPE_N_FLOAT_ARRAY, <<0,4,0,4,10,192,16,0,0,64,16,0,0>>, 0)),
-
-    ?assertEqual({[undefined, -2.25, undefined, 2.25], <<>>}, 
-                  read_value(?LWES_TYPE_N_DOUBLE_ARRAY, 
-                    <<0,4,0,4,10,192,2,0,0,0,0,0,0,64,2,0,0,0,0,0,0>>, 0)), 
-
+  [  
     ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
                   read_value(?LWES_TYPE_N_STRING_ARRAY,
                     <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
   ].
-
 
 deserialize_test () ->
   %% THIS IS A SERIALIZED PACKET
