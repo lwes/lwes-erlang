@@ -54,17 +54,17 @@
            {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:BinarySize/BinaryType>>};
          (_, _) -> erlang:error (badarg)
        end, {<<>>, <<>>}, V),
-    Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
+    LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
     <<LwesType:8/integer-unsigned-big,
       Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-      Lwes_Bitset_Bin/binary, Data/binary>>
+      LwesBitsetBin/binary, Data/binary>>
     ).
 
 -define (read_nullable_array (Bin, LwesType, ElementSize), 
     <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-    {Not_Null_Count, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
-    Count = Not_Null_Count * ElementSize,
-    <<_:Bitset_Length, Values:Count/bits, Rest2/binary>> = Rest,
+    {NotNullCount, BitsetLength, Bitset} = decode_bitset(AL, Rest), 
+    Count = NotNullCount * ElementSize,
+    <<_:BitsetLength, Values:Count/bits, Rest2/binary>> = Rest,
     { read_n_array (LwesType, AL, 1, Bitset ,Values, Format, []), Rest2 }).
 
 %%====================================================================
@@ -304,8 +304,8 @@ split_bounds(Index, Bitset) ->
 
 lwes_bitset_rep (Len, Bitset) ->
   Padding = (erlang:byte_size(Bitset) * 8) - Len, 
-  Bitset_Bin = <<0:Padding, Bitset/bitstring>>,
-    reverse_bytes_in_bin(Bitset_Bin).
+  BitsetBin = <<0:Padding, Bitset/bitstring>>,
+    reverse_bytes_in_bin(BitsetBin).
 
 reverse_bytes_in_bin (Bitset) ->
   binary:list_to_bin(
@@ -313,9 +313,9 @@ reverse_bytes_in_bin (Bitset) ->
           binary:bin_to_list(Bitset))).
 
 decode_bitset(AL, Bin) ->
-  Bitset_Length = lwes_util:ceiling( AL/8 ) * 8, 
-  <<Bitset:Bitset_Length/bitstring, _/bitstring>> = Bin,
-  {lwes_util:count_ones(Bitset), Bitset_Length, reverse_bytes_in_bin(Bitset)}.
+  BitsetLength = lwes_util:ceiling( AL/8 ) * 8, 
+  <<Bitset:BitsetLength/bitstring, _/bitstring>> = Bin,
+  {lwes_util:count_ones(Bitset), BitsetLength, reverse_bytes_in_bin(Bitset)}.
 
 type_to_atom (?LWES_TYPE_U_INT_16) -> ?LWES_U_INT_16;
 type_to_atom (?LWES_TYPE_INT_16)   -> ?LWES_INT_16;
@@ -619,10 +619,10 @@ write (?LWES_N_BOOLEAN_ARRAY, V) ->
       (false,{BitAccum, DataAccum}) -> {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, 0>>};
       (_, _) -> erlang:error (badarg)
     end, {<<>>, <<>>}, V),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
+  LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
   <<?LWES_TYPE_N_BOOLEAN_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>;
+    LwesBitsetBin/binary, Data/binary>>;
 write (?LWES_N_STRING_ARRAY, V) ->
   Len = length (V),
   V1 = string_array_to_binary (V),
@@ -637,10 +637,10 @@ write (?LWES_N_STRING_ARRAY, V) ->
           throw (string_too_big)
       end
   end, {<<>>,<<>>}, V1),
-  Lwes_Bitset_Bin = lwes_bitset_rep (Len, Bitset),
+  LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
   <<?LWES_TYPE_N_STRING_ARRAY:8/integer-unsigned-big,
     Len:16/integer-unsigned-big,  Len:16/integer-unsigned-big,
-    Lwes_Bitset_Bin/binary, Data/binary>>.
+    LwesBitsetBin/binary, Data/binary>>.
 
 
 read_name (Binary) ->
