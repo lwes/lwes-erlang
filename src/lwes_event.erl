@@ -29,10 +29,43 @@
          set_byte_array/3,
          set_float_array/3,
          set_double_array/3,
+         set_nuint16_array/3,
+         set_nint16_array/3,
+         set_nuint32_array/3,
+         set_nint32_array/3,
+         set_nuint64_array/3,
+         set_nint64_array/3,
+         set_nstring_array/3,
+         set_nboolean_array/3,
+         set_nbyte_array/3,
+         set_nfloat_array/3,
+         set_ndouble_array/3,
          to_binary/1,
          from_udp_packet/2,
          from_binary/2,
          peek_name_from_udp/1]).
+
+-define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
+   Len = length (V),
+   {Bitset, Data} = lists:foldl (
+       fun
+         (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
+         (X, {BitAccum, DataAccum}) when Guard (X) ->
+           {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, X:BinarySize/BinaryType>>};
+         (_, _) -> erlang:error (badarg)
+       end, {<<>>, <<>>}, V),
+    LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
+    <<LwesType:8/integer-unsigned-big,
+      Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
+      LwesBitsetBin/binary, Data/binary>>
+    ).
+
+-define (read_nullable_array (Bin, LwesType, ElementSize), 
+    <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
+    {NotNullCount, BitsetLength, Bitset} = decode_bitset(AL, Rest), 
+    Count = NotNullCount * ElementSize,
+    <<_:BitsetLength, Values:Count/bits, Rest2/binary>> = Rest,
+    { read_n_array (LwesType, AL, 1, Bitset ,Values, Format, []), Rest2 }).
 
 %%====================================================================
 %% API
@@ -142,6 +175,50 @@ set_double_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
   E#lwes_event { attrs = [ { ?LWES_DOUBLE_ARRAY, K, V } | A ] };
 set_double_array(_,_,_) ->
   erlang:error(badarg).
+set_nuint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_16_ARRAY, K, V } | A ] };
+set_nuint16_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_16_ARRAY, K, V } | A ] };
+set_nint16_array(_,_,_) ->
+  erlang:error(badarg).
+set_nuint32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_32_ARRAY, K, V } | A ] };
+set_nuint32_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint32_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_32_ARRAY, K, V } | A ] };
+set_nint32_array(_,_,_) ->
+  erlang:error(badarg).
+set_nuint64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_U_INT_64_ARRAY, K, V } | A ] };
+set_nuint64_array(_,_,_) ->
+  erlang:error(badarg).
+set_nint64_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_INT_64_ARRAY, K, V } | A ] };
+set_nint64_array(_,_,_) ->
+  erlang:error(badarg).
+set_nstring_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_STRING_ARRAY, K, V } | A ] };
+set_nstring_array(_,_,_) ->
+  erlang:error(badarg).
+set_nboolean_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_BOOLEAN_ARRAY, K, V } | A ] };
+set_nboolean_array(_,_,_) ->
+  erlang:error(badarg).
+set_nbyte_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_BYTE_ARRAY, K, V } | A ] };
+set_nbyte_array(_,_,_) ->
+  erlang:error(badarg).
+set_nfloat_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_FLOAT_ARRAY, K, V } | A ] };
+set_nfloat_array(_,_,_) ->
+  erlang:error(badarg).
+set_ndouble_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
+  E#lwes_event { attrs = [ { ?LWES_N_DOUBLE_ARRAY, K, V } | A ] };
+set_ndouble_array(_,_,_) ->
+  erlang:error(badarg).
 
 
 
@@ -218,6 +295,27 @@ from_binary (Binary, Format, Accum0) ->
     _ ->
       #lwes_event { name = EventName, attrs = AttrList }
   end.
+
+split_bounds(Index, Bitset) ->
+  Size = size(Bitset) * 8,
+  L = Size - Index, 
+  R = Index - 1, 
+  {L, R}.
+
+lwes_bitset_rep (Len, Bitset) ->
+  Padding = (erlang:byte_size(Bitset) * 8) - Len, 
+  BitsetBin = <<0:Padding, Bitset/bitstring>>,
+    reverse_bytes_in_bin(BitsetBin).
+
+reverse_bytes_in_bin (Bitset) ->
+  binary:list_to_bin(
+      lists:reverse(
+          binary:bin_to_list(Bitset))).
+
+decode_bitset(AL, Bin) ->
+  BitsetLength = lwes_util:ceiling( AL/8 ) * 8, 
+  <<Bitset:BitsetLength/bitstring, _/bitstring>> = Bin,
+  {lwes_util:count_ones(Bitset), BitsetLength, reverse_bytes_in_bin(Bitset)}.
 
 type_to_atom (?LWES_TYPE_U_INT_16) -> ?LWES_U_INT_16;
 type_to_atom (?LWES_TYPE_INT_16)   -> ?LWES_INT_16;
@@ -484,7 +582,65 @@ write (?LWES_DOUBLE_ARRAY, V) ->
     (_, _) -> erlang:error (badarg)
   end, <<>>, V),
   <<?LWES_TYPE_DOUBLE_ARRAY:8/integer-unsigned-big,
-    Len:16/integer-unsigned-big, V2/binary>>.
+    Len:16/integer-unsigned-big, V2/binary>>;
+write (?LWES_N_U_INT_16_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_16_ARRAY,
+                          ?is_uint16, 16, integer-unsigned-big, V);
+write (?LWES_N_INT_16_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_INT_16_ARRAY,
+                          ?is_int16, 16, integer-signed-big, V);
+write (?LWES_N_U_INT_32_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_32_ARRAY,
+                          ?is_uint32, 32, integer-unsigned-big, V);
+write (?LWES_N_INT_32_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_INT_32_ARRAY,
+                          ?is_int32, 32, integer-signed-big, V);
+write (?LWES_N_U_INT_64_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_U_INT_64_ARRAY,
+                          ?is_uint64, 64, integer-unsigned-big, V);
+write (?LWES_N_INT_64_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_INT_64_ARRAY,
+                          ?is_int64, 64, integer-signed-big, V);
+write (?LWES_N_BYTE_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_BYTE_ARRAY,
+                          ?is_byte, 8, integer-signed-big, V);
+write (?LWES_N_FLOAT_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_FLOAT_ARRAY,
+                          is_float, 32, float, V);
+write (?LWES_N_DOUBLE_ARRAY, V) ->
+  ?write_nullable_array(?LWES_TYPE_N_DOUBLE_ARRAY,
+                          is_float, 64, float, V);
+write (?LWES_N_BOOLEAN_ARRAY, V) ->
+  Len = length (V),
+  {Bitset, Data} = lists:foldl (
+    fun
+      (undefined, {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
+      (true, {BitAccum, DataAccum}) -> {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, 1>>};
+      (false,{BitAccum, DataAccum}) -> {<<1:1, BitAccum/bitstring>>, <<DataAccum/binary, 0>>};
+      (_, _) -> erlang:error (badarg)
+    end, {<<>>, <<>>}, V),
+  LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
+  <<?LWES_TYPE_N_BOOLEAN_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big, Len:16/integer-unsigned-big,
+    LwesBitsetBin/binary, Data/binary>>;
+write (?LWES_N_STRING_ARRAY, V) ->
+  Len = length (V),
+  V1 = string_array_to_binary (V),
+  {Bitset, Data} = lists:foldl (
+  fun (undefined , {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
+      (X, {BitAccum, DataAccum}) -> 
+      case iolist_size (X) of
+        SL when SL >= 0, SL =< 65535 ->
+            {<<1:1, BitAccum/bitstring>>, 
+            <<DataAccum/binary, SL:16/integer-unsigned-big, X/binary>>};
+        _ ->
+          throw (string_too_big)
+      end
+  end, {<<>>,<<>>}, V1),
+  LwesBitsetBin = lwes_bitset_rep (Len, Bitset),
+  <<?LWES_TYPE_N_STRING_ARRAY:8/integer-unsigned-big,
+    Len:16/integer-unsigned-big,  Len:16/integer-unsigned-big,
+    LwesBitsetBin/binary, Data/binary>>.
 
 
 read_name (Binary) ->
@@ -634,6 +790,31 @@ read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
   Count = AL*64,
   <<Doubles:Count/bits, Rest2/binary>> = Rest,
   { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
+read_value (?LWES_TYPE_N_U_INT_16_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_16, 16);
+read_value (?LWES_TYPE_N_INT_16_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_16, 16);
+read_value (?LWES_TYPE_N_U_INT_32_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_32, 32);
+read_value (?LWES_TYPE_N_INT_32_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_32, 32);
+read_value (?LWES_TYPE_N_U_INT_64_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_64, 64);
+read_value (?LWES_TYPE_N_INT_64_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_INT_64, 64);
+read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_BOOLEAN, 8);
+read_value (?LWES_TYPE_N_STRING_ARRAY, Bin, _) ->
+  <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
+  {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
+  <<_:Bitset_Length, Rest2/binary>> = Rest,
+  read_n_string_array (AL, 1, Bitset, Rest2, []);
+read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_BYTE, 8);
+read_value (?LWES_TYPE_N_FLOAT_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_FLOAT, 32);
+read_value (?LWES_TYPE_N_DOUBLE_ARRAY, Bin, Format) ->
+  ?read_nullable_array(Bin, ?LWES_TYPE_DOUBLE, 64);
 read_value (_, _, _) ->
   throw (unknown_type).
 
@@ -644,10 +825,28 @@ read_array (Type, Bin, Format, Acc) ->
   { V, Rest } = read_value (Type, Bin, Format),
   read_array (Type, Rest, Format, [V] ++ Acc).
 
+read_n_array (_Type, Count, Index, _Bitset, _Bin, _Format, Acc) when Index > Count -> lists:reverse (Acc);
+read_n_array (Type, Count, Index, Bitset, Bin, Format, Acc) when Index =< Count ->
+  {L, R} = split_bounds(Index, Bitset),
+  << _:L/bits, X:1, _:R/bits >> = Bitset,
+  { V, Rest } = case X of 0 -> {undefined, Bin};
+                          1 -> read_value (Type, Bin, Format)
+                end,
+  read_n_array (Type, Count, Index + 1, Bitset, Rest, Format, [V] ++ Acc).
+
 read_string_array (0, Bin, Acc) -> { lists:reverse (Acc), Bin };
 read_string_array (Count, Bin, Acc) ->
   { V, Rest } = read_value (?LWES_TYPE_STRING, Bin, undefined),
   read_string_array (Count-1, Rest, [V] ++ Acc).
+
+read_n_string_array (Count, Index, _Bitset, Bin, Acc) when Index > Count -> { lists:reverse (Acc), Bin };
+read_n_string_array (Count, Index, Bitset, Bin, Acc) when Index =< Count ->
+  {L, R} = split_bounds(Index, Bitset),
+  << _:L/bits, X:1, _:R/bits >> = Bitset,
+  { V, Rest } = case X of 0 -> {undefined, Bin};
+                          1 -> read_value (?LWES_TYPE_STRING, Bin, undefined)
+                end,
+  read_n_string_array (Count, Index + 1,Bitset, Rest, [V] ++ Acc).
 
 string_array_to_binary (L) -> string_array_to_binary (L, []).
 string_array_to_binary ([], Acc) -> lists:reverse (Acc);
@@ -656,7 +855,11 @@ string_array_to_binary ([ H | T ], Acc) when is_binary (H) ->
 string_array_to_binary ([ H | T ], Acc) when is_list (H) ->
   string_array_to_binary (T, [list_to_binary (H)] ++ Acc);
 string_array_to_binary ([ H | T ], Acc) when is_atom (H) ->
-  string_array_to_binary (T, [ list_to_binary (atom_to_list (H)) ] ++ Acc);
+  case H of
+    undefined -> string_array_to_binary (T, [ undefined ] ++ Acc);
+    _ -> string_array_to_binary (T, 
+                    [ list_to_binary (atom_to_list (H)) ] ++ Acc)
+  end;
 string_array_to_binary (_, _) ->
   erlang:error (badarg).
 
@@ -678,6 +881,44 @@ new_test () ->
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,5)),
     ?_assertError (badarg,
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
+  ].
+
+set_nullable_array_test() ->
+  [
+    ?_assertEqual (#lwes_event {name = "foo", 
+                              attrs = [{nint16_array, key1, [1, -1, undefined, 3, undefined, -4]}]},
+                    lwes_event:set_nint16_array(lwes_event:new(foo), 
+                      key1, [1, -1, undefined, 3, undefined, -4])
+                    )
+  ].
+
+write_read_nullarrays_test() ->
+  [ begin
+      W = write(Type, Arr),
+      <<_:8/bits, Data/binary>> = W,
+      ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0))
+    end
+      || {Type, Type_Id, Arr} <- 
+           [{nuint16_array, 141, [3, undefined, undefined, 500, 10]},
+            {nint16_array, 142, [undefined, -1, undefined, -500, 10]},
+            {nuint32_array, 143, [3, undefined, undefined, 500, 10]}, 
+            {nint32_array, 144, [undefined, -1, undefined, -500, 10]},
+            {nuint64_array, 148, [3, 1844674407370955161, undefined, 10]},
+            {nint64_array, 147, [undefined, undefined, -72036854775808]}, 
+            {nboolean_array, 149, [true, false, undefined, true, true, false]},
+            {nbyte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
+            {nfloat_array, 151, [undefined, -2.25, undefined, 2.25]}, 
+            {ndouble_array, 152, [undefined, undefined, -1.25, 2.25]},
+            {nstring_array, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}]].
+
+string_nullable_arrays_test() ->
+  [
+    ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
+                  <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>),
+
+    ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
+                  read_value(?LWES_TYPE_N_STRING_ARRAY,
+                    <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
   ].
 
 deserialize_test () ->
