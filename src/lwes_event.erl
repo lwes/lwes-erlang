@@ -43,7 +43,12 @@
          to_binary/1,
          from_udp_packet/2,
          from_binary/2,
-         peek_name_from_udp/1]).
+         peek_name_from_udp/1,
+         json/1,
+         untyped_json/1,
+         export_attributes/2,
+         from_json/1,
+         from_json/2]).
 
 -define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
    Len = length (V),
@@ -862,6 +867,123 @@ string_array_to_binary ([ H | T ], Acc) when is_atom (H) ->
   end;
 string_array_to_binary (_, _) ->
   erlang:error (badarg).
+
+json (Event = #lwes_event {name=Name, attrs=_}) ->
+  Accum = {[{ <<"name">>, Name } | export_attributes([typed], Event)]},
+  lwes_mochijson2:encode (Accum).
+
+untyped_json (Event = #lwes_event {name=Name, attrs=_}) ->
+  Accum = {[{ <<"name">>, Name } | export_attributes([untyped], Event)]},
+  lwes_mochijson2:encode (Accum).
+
+export_attributes([],_) ->
+  [];
+export_attributes ([Type | Rest], Event) ->
+  [export_attributes(Type, Event)] ++ export_attributes(Rest, Event);
+export_attributes(typed,#lwes_event{name=_, attrs = Attrs}) ->
+  { <<"typed">>,
+    { lists:foldl (
+      fun ({T,N,V}, A) when T =:= ?LWES_IP_ADDR ->
+            [ { N, [ {<<"type">>, T},
+                     {<<"value">>, lwes_util:ip2bin (V) }
+                   ]
+              }
+              | A
+            ];
+          ({T,N,V}, A) ->
+            [ { N, [ {<<"type">>, T},
+                     {<<"value">>, make_binary (T, V) }
+                   ]
+              }
+              | A
+            ]
+      end,
+      [],
+      Attrs)
+    }
+  };
+export_attributes(untyped, Event = #lwes_event{name=_, attrs=_}) ->
+  { <<"attributes">>,
+    from_binary (to_binary (Event), json_eep18)
+  }.
+
+from_json (Bin, Format) when is_list(Bin); is_binary(Bin)->
+  from_json (mochijson2:decode (Bin, [{format, Format}])).
+
+from_json(Bin) when is_list(Bin); is_binary(Bin) ->
+  from_json(Bin, eep18);
+from_json ({Json}) ->
+  Name = proplists:get_value (<<"name">>, Json),
+  {TypedAttrs} = proplists:get_value (<<"typed">>, Json),
+  #lwes_event {
+    name = Name,
+    attrs = lists:map (fun process_one/1, TypedAttrs)
+  }.
+
+make_binary(Type, Value) ->
+  case is_arr_type(Type) of 
+    true -> lwes_util:arr_to_binary(Value);
+    false -> lwes_util:any_to_binary(Value)
+  end.
+
+
+process_one ({Key, {Attrs}}) ->
+  Type =
+    lwes_util:binary_to_any (proplists:get_value (<<"type">>, Attrs), atom),
+  Value = proplists:get_value (<<"value">>, Attrs),
+  NewValue =
+    case Type of
+      ?LWES_U_INT_16 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_INT_16 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_U_INT_32 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_INT_32 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_U_INT_64 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_INT_64 -> lwes_util:binary_to_any (Value, integer);
+      ?LWES_IP_ADDR -> lwes_util:binary_to_any (Value, list);
+      ?LWES_BOOLEAN -> lwes_util:binary_to_any (Value, atom);
+      ?LWES_STRING -> lwes_util:binary_to_any (Value, list);
+      ?LWES_BYTE -> lwes_util:binary_to_any (Value, binary);
+      ?LWES_FLOAT -> lwes_util:binary_to_any (Value, float);
+      ?LWES_DOUBLE -> lwes_util:binary_to_any (Value, float);
+      ?LWES_U_INT_16_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_U_INT_16_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_INT_16_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_INT_16_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_U_INT_32_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_U_INT_32_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_INT_32_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_INT_32_ARRAY  -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_U_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_U_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
+      ?LWES_N_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
+      ?LWES_IP_ADDR_ARRAY -> lwes_util:binary_to_arr (Value, list);
+      ?LWES_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
+      ?LWES_N_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
+      ?LWES_BYTE_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_N_BYTE_ARRAY -> lwes_util:binary_to_arr (Value, integer);
+      ?LWES_FLOAT_ARRAY -> lwes_util:binary_to_arr (Value, float);
+      ?LWES_N_FLOAT_ARRAY -> lwes_util:binary_to_arr (Value, float);
+      ?LWES_DOUBLE_ARRAY -> lwes_util:binary_to_arr (Value, float);
+      ?LWES_N_DOUBLE_ARRAY -> lwes_util:binary_to_arr (Value, float)
+    end,
+  { Type, Key, NewValue }.
+
+is_arr_type (T) ->
+    T == ?LWES_U_INT_16_ARRAY orelse T == ?LWES_N_U_INT_16_ARRAY orelse
+    T == ?LWES_INT_16_ARRAY orelse T == ?LWES_N_INT_16_ARRAY orelse
+    T == ?LWES_U_INT_32_ARRAY orelse T == ?LWES_N_U_INT_32_ARRAY orelse
+    T == ?LWES_INT_32_ARRAY orelse T == ?LWES_N_INT_32_ARRAY orelse
+    T == ?LWES_INT_64_ARRAY orelse T == ?LWES_N_INT_64_ARRAY orelse
+    T == ?LWES_U_INT_64_ARRAY orelse T == ?LWES_N_U_INT_64_ARRAY orelse
+    T == ?LWES_STRING_ARRAY orelse T == ?LWES_N_STRING_ARRAY orelse
+    T == ?LWES_IP_ADDR_ARRAY orelse
+    T == ?LWES_BOOLEAN_ARRAY orelse T == ?LWES_N_BOOLEAN_ARRAY orelse
+    T == ?LWES_BYTE_ARRAY orelse T == ?LWES_N_BYTE_ARRAY orelse
+    T == ?LWES_FLOAT_ARRAY orelse T == ?LWES_N_FLOAT_ARRAY orelse
+    T == ?LWES_DOUBLE_ARRAY orelse T == ?LWES_N_DOUBLE_ARRAY.
 
 
 %%====================================================================
