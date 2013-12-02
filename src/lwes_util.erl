@@ -16,9 +16,7 @@
           any_to_binary/1,
           arr_to_binary/1,
           binary_to_any/2,
-          binary_to_arr/2,
-          unknown_term_to_json/1,
-          unknown_term_from_json/1]).
+          binary_to_arr/2]).
 
 %%====================================================================
 %% API functions
@@ -80,7 +78,9 @@ any_to_binary (B) when is_binary (B) ->
   B.   
 
 binary_to_arr (List, Type) ->
-  [binary_to_any(E, Type) || E <- List].
+  [ case E of 
+      null -> undefined;
+         _ -> binary_to_any(E, Type) end || E <- List ].
 
 binary_to_any (Bin, binary) when is_binary (Bin) ->
   Bin;
@@ -92,23 +92,13 @@ binary_to_any (List, integer) ->
 binary_to_any (List, float) ->
   {F, _} = string:to_float (List),
   F;
+binary_to_any (List, ipaddr) -> normalize_ip (List);
 binary_to_any (L = [H|_], list) when is_binary (H) ->
   [ binary_to_list (E) || E <- L ];
 binary_to_any (List, list) ->
   List;
 binary_to_any (List, atom) ->
   list_to_atom (List).
-
-
-unknown_term_to_json (Term) ->
-  list_to_binary (io_lib:format ("~p.",[Term])).
-
-unknown_term_from_json (B) when is_binary (B) ->
-  unknown_term_from_json (binary_to_list (B));
-unknown_term_from_json (J) ->
-  {ok, Scanned, _} = erl_scan:string (J),
-  {ok, Term} = erl_parse:parse_term (Scanned),
-  Term.
 
 
 %%====================================================================
@@ -151,16 +141,6 @@ binary_test_ () ->
       { true, atom },
       { ["1"], list },
       { ["1","2"], list }
-    ]
-  ].
-
-unknown_term_test_ () ->
-  [
-    ?_assertEqual (U, unknown_term_from_json (unknown_term_to_json (U)))
-    || U
-    <- [
-      {foo,bar},
-      {foo,bar,[1,2,3],3.14159,<<"cats and dogs">>,{hello, world}}
     ]
   ].
 

@@ -335,17 +335,28 @@ type_to_atom (?LWES_TYPE_BYTE)     -> ?LWES_BYTE;
 type_to_atom (?LWES_TYPE_FLOAT)    -> ?LWES_FLOAT;
 type_to_atom (?LWES_TYPE_DOUBLE)   -> ?LWES_DOUBLE;
 type_to_atom (?LWES_TYPE_U_INT_16_ARRAY) -> ?LWES_U_INT_16_ARRAY;
+type_to_atom (?LWES_TYPE_N_U_INT_16_ARRAY) -> ?LWES_N_U_INT_16_ARRAY;
 type_to_atom (?LWES_TYPE_INT_16_ARRAY)   -> ?LWES_INT_16_ARRAY;
+type_to_atom (?LWES_TYPE_N_INT_16_ARRAY)   -> ?LWES_N_INT_16_ARRAY;
 type_to_atom (?LWES_TYPE_U_INT_32_ARRAY) -> ?LWES_U_INT_32_ARRAY;
+type_to_atom (?LWES_TYPE_N_U_INT_32_ARRAY) -> ?LWES_N_U_INT_32_ARRAY;
 type_to_atom (?LWES_TYPE_INT_32_ARRAY)   -> ?LWES_INT_32_ARRAY;
+type_to_atom (?LWES_TYPE_N_INT_32_ARRAY)   -> ?LWES_N_INT_32_ARRAY;
 type_to_atom (?LWES_TYPE_INT_64_ARRAY)   -> ?LWES_INT_64_ARRAY;
+type_to_atom (?LWES_TYPE_N_INT_64_ARRAY)   -> ?LWES_N_INT_64_ARRAY;
 type_to_atom (?LWES_TYPE_U_INT_64_ARRAY) -> ?LWES_U_INT_64_ARRAY;
+type_to_atom (?LWES_TYPE_N_U_INT_64_ARRAY) -> ?LWES_N_U_INT_64_ARRAY;
 type_to_atom (?LWES_TYPE_STRING_ARRAY)   -> ?LWES_STRING_ARRAY;
+type_to_atom (?LWES_TYPE_N_STRING_ARRAY)   -> ?LWES_N_STRING_ARRAY;
 type_to_atom (?LWES_TYPE_IP_ADDR_ARRAY)  -> ?LWES_IP_ADDR_ARRAY;
 type_to_atom (?LWES_TYPE_BOOLEAN_ARRAY)  -> ?LWES_BOOLEAN_ARRAY;
+type_to_atom (?LWES_TYPE_N_BOOLEAN_ARRAY)  -> ?LWES_N_BOOLEAN_ARRAY;
 type_to_atom (?LWES_TYPE_BYTE_ARRAY)     -> ?LWES_BYTE_ARRAY;
+type_to_atom (?LWES_TYPE_N_BYTE_ARRAY)     -> ?LWES_N_BYTE_ARRAY;
 type_to_atom (?LWES_TYPE_FLOAT_ARRAY)    -> ?LWES_FLOAT_ARRAY;
-type_to_atom (?LWES_TYPE_DOUBLE_ARRAY)   -> ?LWES_DOUBLE_ARRAY.
+type_to_atom (?LWES_TYPE_N_FLOAT_ARRAY)    -> ?LWES_N_FLOAT_ARRAY;
+type_to_atom (?LWES_TYPE_DOUBLE_ARRAY)   -> ?LWES_DOUBLE_ARRAY;
+type_to_atom (?LWES_TYPE_N_DOUBLE_ARRAY)   -> ?LWES_N_DOUBLE_ARRAY.
 
 millisecond_since_epoch () ->
   {Meg, Sec, Mic} = os:timestamp(),
@@ -939,10 +950,10 @@ process_one ({Key, {Attrs}}) ->
       ?LWES_INT_32 -> lwes_util:binary_to_any (Value, integer);
       ?LWES_U_INT_64 -> lwes_util:binary_to_any (Value, integer);
       ?LWES_INT_64 -> lwes_util:binary_to_any (Value, integer);
-      ?LWES_IP_ADDR -> lwes_util:binary_to_any (Value, list);
+      ?LWES_IP_ADDR -> lwes_util:binary_to_any (Value, ipaddr);
       ?LWES_BOOLEAN -> lwes_util:binary_to_any (Value, atom);
       ?LWES_STRING -> lwes_util:binary_to_any (Value, list);
-      ?LWES_BYTE -> lwes_util:binary_to_any (Value, binary);
+      ?LWES_BYTE -> lwes_util:binary_to_any (Value, integer);
       ?LWES_FLOAT -> lwes_util:binary_to_any (Value, float);
       ?LWES_DOUBLE -> lwes_util:binary_to_any (Value, float);
       ?LWES_U_INT_16_ARRAY -> lwes_util:binary_to_arr (Value, integer);
@@ -959,7 +970,7 @@ process_one ({Key, {Attrs}}) ->
       ?LWES_N_U_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
       ?LWES_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
       ?LWES_N_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
-      ?LWES_IP_ADDR_ARRAY -> lwes_util:binary_to_arr (Value, list);
+      ?LWES_IP_ADDR_ARRAY -> lwes_util:binary_to_arr (Value, ipaddr);
       ?LWES_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
       ?LWES_N_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
       ?LWES_BYTE_ARRAY -> lwes_util:binary_to_arr (Value, integer);
