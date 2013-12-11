@@ -2,7 +2,7 @@
 
 -include_lib ("lwes.hrl").
 -include_lib ("lwes_internal.hrl").
-
+  
 %% API
 -export([new/1,
          set_uint16/3,
@@ -919,7 +919,7 @@ export_attributes(untyped, Event = #lwes_event{name=_, attrs=_}) ->
   }.
 
 from_json (Bin, Format) when is_list(Bin); is_binary(Bin)->
-  from_json (mochijson2:decode (Bin, [{format, Format}])).
+  from_json (lwes_mochijson2:decode (Bin, [{format, Format}])).
 
 from_json(Bin) when is_list(Bin); is_binary(Bin) ->
   from_json(Bin, eep18);
