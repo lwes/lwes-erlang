@@ -15,6 +15,7 @@
           count_ones/1,
           any_to_binary/1,
           arr_to_binary/1,
+          arr_to_binary/2,
           binary_to_any/2,
           binary_to_arr/2]).
 
@@ -60,6 +61,8 @@ count_ones(<<>>, Counter) -> Counter;
 count_ones(<<X:1, Rest/bitstring>>, Counter) ->
   count_ones(Rest, Counter + X).
 
+arr_to_binary (L, ipaddr) ->
+  [ip2bin(E) || E <- L ].
 arr_to_binary (L) ->
   [any_to_binary (E) || E <- L ].
 

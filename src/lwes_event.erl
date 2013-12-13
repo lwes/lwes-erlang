@@ -44,11 +44,9 @@
          from_udp_packet/2,
          from_binary/2,
          peek_name_from_udp/1,
-         json/1,
-         untyped_json/1,
-         export_attributes/2,
          from_json/1,
-         from_json/2]).
+         to_json/1, 
+         to_json/2]).
 
 -define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
    Len = length (V),
@@ -289,15 +287,36 @@ from_binary (Binary, Format) ->
 
 from_binary (Binary, Format, Accum0) ->
   { EventName, Attrs } = read_name (Binary),
-  AttrList = read_attrs (Attrs, Format, Accum0),
   case Format of
     json ->
+      AttrList = read_attrs (Attrs, json, Accum0),
       [{<<"EventName">>, EventName} | AttrList ];
+    json_untyped -> 
+      AttrList = read_attrs (Attrs, json, Accum0),
+      [{<<"EventName">>, EventName} | AttrList];
+    json_typed -> 
+      AttrList = read_attrs (Attrs, json_typed, Accum0),
+      [{<<"EventName">>, EventName} | export_attributes(typed, AttrList)];
     json_proplist ->
+      AttrList = read_attrs (Attrs, json_proplist, Accum0),
       [{<<"EventName">>, EventName} | AttrList ];
+    json_proplist_untyped ->
+      AttrList = read_attrs (Attrs, json_proplist, Accum0),
+      [{<<"EventName">>, EventName} | AttrList ];
+    json_proplist_typed ->
+      AttrList = read_attrs (Attrs, json_proplist_typed, Accum0),
+      [{<<"EventName">>, EventName} | export_attributes(typed, AttrList)];
     json_eep18 ->
-      { [{<<"EventName">>, EventName} | AttrList ] };
+      AttrList = read_attrs (Attrs, json_eep18, Accum0),
+      {[{<<"EventName">>, EventName} | AttrList ] };
+    json_eep18_untyped ->
+      AttrList = read_attrs (Attrs, json_eep18, Accum0),
+      {[{<<"EventName">>, EventName} | AttrList ] };
+    json_eep18_typed ->
+      AttrList = read_attrs (Attrs, json_eep18_typed, Accum0),
+      {[{<<"EventName">>, EventName} | export_attributes(typed, AttrList)]};
     _ ->
+      AttrList = read_attrs (Attrs, Format, Accum0),
       #lwes_event { name = EventName, attrs = AttrList }
   end.
 
@@ -685,6 +704,13 @@ read_attrs (Bin, Format, Accum) ->
                            _:_ -> V
                          end }
                      | Accum ];
+                 json_typed ->
+                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, struct}]) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
                  json_proplist ->
                    [ {K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
                            S -> S
@@ -692,8 +718,22 @@ read_attrs (Bin, Format, Accum) ->
                            _:_ -> V
                          end }
                      | Accum ];
+                 json_proplist_typed ->
+                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
                  json_eep18 ->
                    [ {K, try lwes_mochijson2:decode (V, [{format, eep18}]) of
+                           S -> S
+                         catch
+                           _:_ -> V
+                         end }
+                     | Accum ];
+                 json_eep18_typed ->
+                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, eep18}]) of
                            S -> S
                          catch
                            _:_ -> V
@@ -879,24 +919,35 @@ string_array_to_binary ([ H | T ], Acc) when is_atom (H) ->
 string_array_to_binary (_, _) ->
   erlang:error (badarg).
 
-json (Event = #lwes_event {name=Name, attrs=_}) ->
-  Accum = {[{ <<"name">>, Name } | export_attributes([typed], Event)]},
-  lwes_mochijson2:encode (Accum).
+to_json(Bin) when is_binary (Bin) ->
+  to_json(from_binary(Bin, json_eep18_typed), json_typed_string);
+to_json(Event= #lwes_event{name=_, attrs=_}) -> 
+  to_json(Event, json_typed_string).
 
-untyped_json (Event = #lwes_event {name=Name, attrs=_}) ->
-  Accum = {[{ <<"name">>, Name } | export_attributes([untyped], Event)]},
-  lwes_mochijson2:encode (Accum).
+to_json (Bin, Format) when is_binary (Bin) ->
+  from_binary (Bin, Format);
+to_json (Event = #lwes_event {name = _, attrs= _}, json_typed_string) ->
+  lwes_mochijson2:encode (to_json(Event, json_typed));
+to_json (_Event = #lwes_event {name = Name, attrs= Attrs}, json_typed) ->
+  {[{<<"name">>, Name } | [export_attributes(typed, Attrs)]]};
+to_json (Event = #lwes_event {name = Name, attrs= _}, Format) ->
+  {[{<<"name">>, Name } | 
+   [{<<"attributes">>, from_binary (to_binary (Event), Format)}]]}.
 
-export_attributes([],_) ->
-  [];
-export_attributes ([Type | Rest], Event) ->
-  [export_attributes(Type, Event)] ++ export_attributes(Rest, Event);
-export_attributes(typed,#lwes_event{name=_, attrs = Attrs}) ->
+
+export_attributes(typed, Attrs) ->
   { <<"typed">>,
     { lists:foldl (
       fun ({T,N,V}, A) when T =:= ?LWES_IP_ADDR ->
             [ { N, [ {<<"type">>, T},
                      {<<"value">>, lwes_util:ip2bin (V) }
+                   ]
+              }
+              | A
+            ];
+          ({T,N,V}, A) when T =:= ?LWES_IP_ADDR_ARRAY ->
+            [ { N, [ {<<"type">>, T},
+                     {<<"value">>, lwes_util:arr_to_binary(V, ipaddr) }
                    ]
               }
               | A
@@ -912,17 +963,10 @@ export_attributes(typed,#lwes_event{name=_, attrs = Attrs}) ->
       [],
       Attrs)
     }
-  };
-export_attributes(untyped, Event = #lwes_event{name=_, attrs=_}) ->
-  { <<"attributes">>,
-    from_binary (to_binary (Event), json_eep18)
   }.
 
-from_json (Bin, Format) when is_list(Bin); is_binary(Bin)->
-  from_json (lwes_mochijson2:decode (Bin, [{format, Format}])).
-
 from_json(Bin) when is_list(Bin); is_binary(Bin) ->
-  from_json(Bin, eep18);
+  from_json (lwes_mochijson2:decode (Bin, [{format, eep18}]));
 from_json ({Json}) ->
   Name = proplists:get_value (<<"name">>, Json),
   {TypedAttrs} = proplists:get_value (<<"typed">>, Json),
