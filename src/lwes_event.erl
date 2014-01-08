@@ -1076,21 +1076,21 @@ write_read_nullarrays_test() ->
       ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0))
     end
       || {Type, Type_Id, Arr} <- 
-           [{nuint16_array, 141, [3, undefined, undefined, 500, 10]},
-            {nint16_array, 142, [undefined, -1, undefined, -500, 10]},
-            {nuint32_array, 143, [3, undefined, undefined, 500, 10]}, 
-            {nint32_array, 144, [undefined, -1, undefined, -500, 10]},
-            {nuint64_array, 148, [3, 1844674407370955161, undefined, 10]},
-            {nint64_array, 147, [undefined, undefined, -72036854775808]}, 
-            {nboolean_array, 149, [true, false, undefined, true, true, false]},
-            {nbyte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
-            {nfloat_array, 151, [undefined, -2.25, undefined, 2.25]}, 
-            {ndouble_array, 152, [undefined, undefined, -1.25, 2.25]},
-            {nstring_array, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}]].
+           [{nullable_uint16_array, 141, [3, undefined, undefined, 500, 10]},
+            {nullable_int16_array, 142, [undefined, -1, undefined, -500, 10]},
+            {nullable_uint32_array, 143, [3, undefined, undefined, 500, 10]}, 
+            {nullable_int32_array, 144, [undefined, -1, undefined, -500, 10]},
+            {nullable_uint64_array, 148, [3, 1844674407370955161, undefined, 10]},
+            {nullable_int64_array, 147, [undefined, undefined, -72036854775808]}, 
+            {nullable_boolean_array, 149, [true, false, undefined, true, true, false]},
+            {nullable_byte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
+            {nullable_float_array, 151, [undefined, -2.25, undefined, 2.25]}, 
+            {nullable_double_array, 152, [undefined, undefined, -1.25, 2.25]},
+            {nullable_string_array, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}]].
 
 string_nullable_arrays_test() ->
   [
-    ?assertEqual(write(nstring_array, [undefined, "test", "should ", "pass"]), 
+    ?assertEqual(write(nullable_string_array, [undefined, "test", "should ", "pass"]), 
                   <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>),
 
     ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
