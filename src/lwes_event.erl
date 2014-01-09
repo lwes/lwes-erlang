@@ -296,7 +296,7 @@ from_binary (Binary, Format, Accum0) ->
       [{<<"EventName">>, EventName} | AttrList];
     json_typed -> 
       AttrList = read_attrs (Attrs, json_typed, Accum0),
-      [{<<"EventName">>, EventName}] ++ [export_attributes(typed, AttrList)];
+      [{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]];
     json_proplist ->
       AttrList = read_attrs (Attrs, json_proplist, Accum0),
       [{<<"EventName">>, EventName} | AttrList ];
@@ -305,7 +305,7 @@ from_binary (Binary, Format, Accum0) ->
       [{<<"EventName">>, EventName} | AttrList ];
     json_proplist_typed ->
       AttrList = read_attrs (Attrs, json_proplist_typed, Accum0),
-      [{<<"EventName">>, EventName}] ++ [export_attributes(typed, AttrList)];
+      [{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]];
     json_eep18 ->
       AttrList = read_attrs (Attrs, json_eep18, Accum0),
       {[{<<"EventName">>, EventName} | AttrList ] };
@@ -314,7 +314,7 @@ from_binary (Binary, Format, Accum0) ->
       {[{<<"EventName">>, EventName} | AttrList ] };
     json_eep18_typed ->
       AttrList = read_attrs (Attrs, json_eep18_typed, Accum0),
-      {[{<<"EventName">>, EventName}] ++ [export_attributes(typed, AttrList)]};
+      {[{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]]};
     _ ->
       AttrList = read_attrs (Attrs, Format, Accum0),
       #lwes_event { name = EventName, attrs = AttrList }
