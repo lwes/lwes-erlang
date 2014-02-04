@@ -1,16 +1,31 @@
 Light Weight Event System (LWES)
 ================================
-
+For more information about lwes, see http://www.lwes.org/, for more information
+about using lwes from erlang read on.
 
 Creating Events
 -------------------------
+There are 2 ways of creating events, the functional way
+
 ```erlang
 Event0 = lwes_event:new ("MyEvent"),
 Event1 = lwes_event:set_uint16 (Event0, "MyUint16", 25),
 ```
 
+or via records like
+
+```erlang
+Event = #lwes_event {
+          name = "MyEvent",
+          attrs = [{uint16, "MyUint16", 25}]
+        },
+```
+
 Emitting to a single channel
 -------------------------
+If you are using multicast, or only want to emit to a single channel you
+can open it as follows
+
 ```erlang
 {ok, Channel0} = lwes:open (emitter, {Ip, Port})
 Channel1 = lwes:emit (Channel0, Event1).
@@ -18,6 +33,9 @@ Channel1 = lwes:emit (Channel0, Event1).
 
 Emit to several channels
 -------------------------
+If you aren't using multicast but would like to emit to several machines,
+or groups of machines you can with slightly different config,
+
 ```erlang
 % emit to 1 of a set in a round robin fashion
 {ok, Channels0} = lwes:open (emitters, {1, [{Ip1,Port1},...{IpN,PortN}]})
