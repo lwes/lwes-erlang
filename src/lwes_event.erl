@@ -42,6 +42,7 @@
          set_ndouble_array/3,
          to_binary/1,
          from_udp_packet/2,
+         from_binary/1,
          from_binary/2,
          peek_name_from_udp/1,
          from_json/1,
@@ -274,6 +275,9 @@ from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
     end,
   from_binary (Packet, Format, Extra).
 
+from_binary (B) when is_binary (B) ->
+  from_binary (B, record).
+
 from_binary (<<>>, _) ->
   undefined;
 from_binary (Binary, dict) ->
@@ -409,6 +413,8 @@ write_attrs ([{K,V} | Rest], Accum) when ?is_uint64 (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_U_INT_64, V) | Accum ]);
 write_attrs ([{K,V} | Rest], Accum) when is_boolean (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_BOOLEAN, V) | Accum ]);
+write_attrs ([{K,V} | Rest], Accum) when is_atom (V); is_binary (V) ->
+  write_attrs (Rest, [ write_key (K), write (?LWES_STRING, V) | Accum ]);
 write_attrs ([{K,V} | Rest], Accum) when is_list (V) ->
   write_attrs (Rest, [ write_key (K), write (type_array (V), V) | Accum ]);
 write_attrs ([{K,V = {_,_,_,_}} | Rest], Accum) when ?is_ip_addr (V) ->
@@ -1047,7 +1053,7 @@ is_arr_type (T) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-new_test () ->
+new_test_ () ->
   [
     ?_assertEqual (#lwes_event { name = "foo", attrs = []}, new (foo)),
     ?_assertEqual (#lwes_event{name = "foo",attrs = [{int16,cat,-5}]},
@@ -1060,11 +1066,39 @@ new_test () ->
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
   ].
 
-set_nullable_array_test() ->
+allow_atom_and_binary_for_strings_test_ () ->
+  [ ?_assertEqual (
+      #lwes_event {name = <<"foo">>,attrs=[{<<"bar">>,<<"baz">>}]},
+      from_binary(
+        to_binary(
+          #lwes_event {name="foo", attrs=[{"bar",baz}]}
+        )
+      )
+    ),
+    ?_assertEqual (
+      #lwes_event {name = <<"foo">>,attrs=[{<<"bar">>,<<"baz">>}]},
+      from_binary(
+        to_binary(
+          #lwes_event {name="foo", attrs=[{"bar",<<"baz">>}]}
+        )
+      )
+    ),
+    ?_assertEqual (
+      #lwes_event {name = <<"foo">>,attrs=[{<<"bar">>,<<"baz">>}]},
+      from_binary(
+        to_binary(
+          #lwes_event {name="foo", attrs=[{"bar","baz"}]}
+        )
+      )
+    )
+  ].
+
+set_nullable_array_test_ () ->
   [
-    ?_assertEqual (#lwes_event {name = "foo", 
-                              attrs = [{nint16_array, key1, [1, -1, undefined, 3, undefined, -4]}]},
-                    lwes_event:set_nint16_array(lwes_event:new(foo), 
+    ?_assertEqual (#lwes_event {name = "foo",
+                                attrs = [ { ?LWES_N_INT_16_ARRAY, key1,
+                                            [1, -1, undefined, 3, undefined, -4]}]},
+                    lwes_event:set_nint16_array(lwes_event:new(foo),
                       key1, [1, -1, undefined, 3, undefined, -4])
                     )
   ].
@@ -1075,22 +1109,25 @@ write_read_nullarrays_test() ->
       <<_:8/bits, Data/binary>> = W,
       ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0))
     end
-      || {Type, Type_Id, Arr} <- 
-           [{nullable_uint16_array, 141, [3, undefined, undefined, 500, 10]},
-            {nullable_int16_array, 142, [undefined, -1, undefined, -500, 10]},
-            {nullable_uint32_array, 143, [3, undefined, undefined, 500, 10]}, 
-            {nullable_int32_array, 144, [undefined, -1, undefined, -500, 10]},
-            {nullable_uint64_array, 148, [3, 1844674407370955161, undefined, 10]},
-            {nullable_int64_array, 147, [undefined, undefined, -72036854775808]}, 
-            {nullable_boolean_array, 149, [true, false, undefined, true, true, false]},
-            {nullable_byte_array, 150, [undefined, undefined, undefined, 23, 72, 9]},
-            {nullable_float_array, 151, [undefined, -2.25, undefined, 2.25]}, 
-            {nullable_double_array, 152, [undefined, undefined, -1.25, 2.25]},
-            {nullable_string_array, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}]].
+      || {Type, Type_Id, Arr}
+      <- [
+        {?LWES_N_U_INT_16_ARRAY, 141, [3, undefined, undefined, 500, 10]},
+        {?LWES_N_INT_16_ARRAY, 142, [undefined, -1, undefined, -500, 10]},
+        {?LWES_N_U_INT_32_ARRAY, 143, [3, undefined, undefined, 500, 10]}, 
+        {?LWES_N_INT_32_ARRAY, 144, [undefined, -1, undefined, -500, 10]},
+        {?LWES_N_U_INT_64_ARRAY, 148, [3, 1844674407370955161, undefined, 10]},
+        {?LWES_N_INT_64_ARRAY, 147, [undefined, undefined, -72036854775808]}, 
+        {?LWES_N_BOOLEAN_ARRAY, 149, [true, false, undefined, true, true, false]},
+        {?LWES_N_BYTE_ARRAY, 150, [undefined, undefined, undefined, 23, 72, 9]},
+        {?LWES_N_FLOAT_ARRAY, 151, [undefined, -2.25, undefined, 2.25]}, 
+        {?LWES_N_DOUBLE_ARRAY, 152, [undefined, undefined, -1.25, 2.25]},
+        {?LWES_N_STRING_ARRAY, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}
+      ]
+  ].
 
 string_nullable_arrays_test() ->
   [
-    ?assertEqual(write(nullable_string_array, [undefined, "test", "should ", "pass"]), 
+    ?assertEqual(write(?LWES_N_STRING_ARRAY, [undefined, "test", "should ", "pass"]), 
                   <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>),
 
     ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
