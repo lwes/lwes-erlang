@@ -1,3 +1,6 @@
+Version 2.3.1 (molinaro)
+  * there was an encoding bug with string types
+
 Version 2.3.0 (molinaro)
   * added array types
 

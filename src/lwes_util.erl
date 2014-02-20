@@ -3,10 +3,6 @@
 -include_lib ("lwes.hrl").
 -include_lib ("lwes_internal.hrl").
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 % API
 -export ([normalize_ip/1,
           ip2bin/1,
@@ -107,28 +103,43 @@ binary_to_any (List, atom) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 
-normalize_ip_test () ->
-  ?assertEqual ({127,0,0,1}, normalize_ip ("127.0.0.1")),
-  ?assertEqual ({127,0,0,1}, normalize_ip ({127,0,0,1})),
-  ?assertError (badarg, normalize_ip ("655.0.0.1")),
-  ?assertError (badarg, normalize_ip ({655,0,0,1})).
+normalize_ip_test_ () ->
+  [
+    ?_assertEqual ({127,0,0,1}, normalize_ip ("127.0.0.1")),
+    ?_assertEqual ({127,0,0,1}, normalize_ip ({127,0,0,1})),
+    ?_assertError (badarg, normalize_ip ("655.0.0.1")),
+    ?_assertError (badarg, normalize_ip ({655,0,0,1}))
+  ].
 
 check_ip_port_test () ->
-  ?assertEqual ({{127,0,0,1},9191}, check_ip_port ({"127.0.0.1",9191})),
-  ?assertEqual ({{127,0,0,1},9191}, check_ip_port ({{127,0,0,1},9191})),
-  ?assertError (badarg, check_ip_port ({"655.0.0.1",9191})),
-  ?assertError (badarg, check_ip_port ({{655,0,0,1},9191})),
-  ?assertError (badarg, check_ip_port ({{127,0,0,1},91919})).
+  [
+    ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({"127.0.0.1",9191})),
+    ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({{127,0,0,1},9191})),
+    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191})),
+    ?_assertError (badarg, check_ip_port ({{655,0,0,1},9191})),
+    ?_assertError (badarg, check_ip_port ({{127,0,0,1},91919}))
+  ].
 
-ceil_test () ->
-  ?assertEqual(8, ceiling(7.5)),
-  ?assertEqual(-10, ceiling(-10.9)).
+ceil_test_ () ->
+  [
+    ?_assertEqual(8, ceiling(7.5)),
+    ?_assertEqual(-10, ceiling(-10.9)),
+    ?_assertEqual(0, ceiling(0))
+  ].
 
-count_ones_test () ->
-  [?assertEqual(7, count_ones(27218)),
-  ?assertEqual(0, ceiling(0))].
+count_ones_test_ () ->
+  [
+    ?_assertEqual(0, count_ones (<<2#00000000>>)),
+    ?_assertEqual(1, count_ones (<<2#00000001>>)),
+    ?_assertEqual(1, count_ones (<<2#00000010>>)),
+    ?_assertEqual(2, count_ones (<<2#00000011>>)),
+    ?_assertEqual(2, count_ones (<<2#11000000>>)),
+    ?_assertEqual(7, count_ones (<<2#01111111>>)),
+    ?_assertEqual(14, count_ones (<<2#01111111,2#01111111>>))
+  ].
 
 binary_test_ () ->
   [
