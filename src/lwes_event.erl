@@ -1082,6 +1082,22 @@ new_test_ () ->
                    lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
   ].
 
+large_binary_test () ->
+  B = large_bin (),
+  ?assertEqual (
+     #lwes_event {name = <<"foo">>, attrs = [{<<"bar">>, B}]},
+     from_binary (
+       to_binary (
+         #lwes_event {name = <<"foo">>, attrs = [{large_binary, "bar", B}]}
+         ))). 
+
+large_bin () -> 
+  lists:foldl (fun (X, A) -> 
+                 <<1:8, A/binary>>
+               end,
+               << >>, 
+               lists:seq (1, 99999)).
+
 allow_atom_and_binary_for_strings_test_ () ->
   [ ?_assertEqual (
       #lwes_event {name = <<"foo">>,attrs=[{<<"bar">>,<<"baz">>}]},
