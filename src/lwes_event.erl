@@ -17,6 +17,7 @@
          set_byte/3,
          set_float/3,
          set_double/3,
+         set_large_binary/3,
          set_uint16_array/3,
          set_int16_array/3,
          set_uint32_array/3,
@@ -129,6 +130,10 @@ set_float(_,_,_) ->
 set_double(E = #lwes_event { attrs = A}, K, V) when is_float (V) ->
   E#lwes_event { attrs = [ { ?LWES_DOUBLE, K, V } | A ] };
 set_double(_,_,_) ->
+  erlang:error(badarg).
+set_large_binary(E = #lwes_event { attrs = A}, K, V) when is_binary (V) ->
+  E#lwes_event { attrs = [ { ?LWES_LARGE_BINARY, K, V } | A ] };
+set_large_binary(_,_,_) ->
   erlang:error(badarg).
 set_uint16_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
   E#lwes_event { attrs = [ { ?LWES_U_INT_16_ARRAY, K, V } | A ] };
@@ -357,6 +362,7 @@ type_to_atom (?LWES_TYPE_IP_ADDR)  -> ?LWES_IP_ADDR;
 type_to_atom (?LWES_TYPE_BYTE)     -> ?LWES_BYTE;
 type_to_atom (?LWES_TYPE_FLOAT)    -> ?LWES_FLOAT;
 type_to_atom (?LWES_TYPE_DOUBLE)   -> ?LWES_DOUBLE;
+type_to_atom (?LWES_TYPE_LARGE_BINARY) -> ?LWES_LARGE_BINARY;
 type_to_atom (?LWES_TYPE_U_INT_16_ARRAY) -> ?LWES_U_INT_16_ARRAY;
 type_to_atom (?LWES_TYPE_N_U_INT_16_ARRAY) -> ?LWES_N_U_INT_16_ARRAY;
 type_to_atom (?LWES_TYPE_INT_16_ARRAY)   -> ?LWES_INT_16_ARRAY;
@@ -504,6 +510,13 @@ write (?LWES_FLOAT, V) ->
   <<?LWES_TYPE_FLOAT:8/integer-unsigned-big, V:32/float>>;
 write (?LWES_DOUBLE, V) ->
   <<?LWES_TYPE_DOUBLE:8/integer-unsigned-big, V:64/float>>;
+write (?LWES_LARGE_BINARY, V) when is_binary (V) ->
+  case iolist_size (V) of
+     BinLength when BinLength =< 4294967295 
+       -> <<?LWES_TYPE_LARGE_BINARY:8/integer-unsigned-big, 
+            BinLength:32/integer-unsigned-big, V/binary>>;
+     _ -> throw (binary_too_big)
+  end; 
 write (?LWES_U_INT_16_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
@@ -794,6 +807,9 @@ read_value (?LWES_TYPE_FLOAT, Bin, _Format) ->
   { V, Rest };
 read_value (?LWES_TYPE_DOUBLE, Bin, _Format) ->
   <<V:64/float, Rest/binary>> = Bin,
+  { V, Rest };
+read_value (?LWES_TYPE_LARGE_BINARY, Bin, _Format) ->
+  <<BL:32/integer-unsigned-big, V:BL/binary, Rest/binary>> = Bin,
   { V, Rest };
 read_value (?LWES_TYPE_U_INT_16_ARRAY, Bin, Format) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
