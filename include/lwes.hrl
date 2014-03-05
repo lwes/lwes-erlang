@@ -15,7 +15,7 @@
 -define (LWES_TYPE_BYTE,               10).
 -define (LWES_TYPE_FLOAT,              11).
 -define (LWES_TYPE_DOUBLE,             12).
--define (LWES_TYPE_LARGE_BINARY,       13).
+-define (LWES_TYPE_LONG_STRING,        13).
 -define (LWES_TYPE_U_INT_16_ARRAY,    129).
 -define (LWES_TYPE_INT_16_ARRAY,      130).
 -define (LWES_TYPE_U_INT_32_ARRAY,    131).
@@ -55,7 +55,7 @@
 -define (LWES_BYTE,             byte).
 -define (LWES_FLOAT,            float).
 -define (LWES_DOUBLE,           double).
--define (LWES_LARGE_BINARY,     large_binary).
+-define (LWES_LONG_STRING,      long_string).
 -define (LWES_U_INT_16_ARRAY,   uint16_array).
 -define (LWES_INT_16_ARRAY,     int16_array).
 -define (LWES_U_INT_32_ARRAY,   uint32_array).
