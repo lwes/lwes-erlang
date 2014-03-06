@@ -426,9 +426,9 @@ write_attrs ([{K,V} | Rest], Accum) when is_atom (V); is_binary (V) ->
     _ -> 
        case iolist_size (V) of
          SL when SL >= 0, SL =< 65535 ->
-           write_attrs (Rest, [ write_key (K), write (?LWES_STRING, V) | Accum ]);
+           write_attrs (Rest, [ write_key (K), write (?LWES_STRING, SL, V) | Accum ]);
          SL when SL=< 4294967295 ->
-           write_attrs (Rest, [ write_key (K), write (?LWES_LONG_STRING, V) | Accum ]);
+           write_attrs (Rest, [ write_key (K), write (?LWES_LONG_STRING, SL, V) | Accum ]);
          _ -> throw (string_too_big)
        end
   end;
