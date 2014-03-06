@@ -508,26 +508,15 @@ write (?LWES_BOOLEAN, false) ->
 write (?LWES_STRING, V) when is_atom (V) ->
   write (?LWES_STRING, atom_to_list (V));
 write (?LWES_STRING, V) when is_list (V); is_binary (V) ->
-  case iolist_size (V) of
-    SL when SL >= 0, SL =< 65535 ->
-      [ <<?LWES_TYPE_STRING:8/integer-unsigned-big,
-          SL:16/integer-unsigned-big>>, V ];
-    _ ->
-      throw (string_too_big)
-  end;
+  write (?LWES_STRING, iolist_size (V), V);
 write (?LWES_BYTE, V) ->
   <<?LWES_TYPE_BYTE:8/integer-unsigned-big, V:8/integer-unsigned-big>>;
 write (?LWES_FLOAT, V) ->
   <<?LWES_TYPE_FLOAT:8/integer-unsigned-big, V:32/float>>;
 write (?LWES_DOUBLE, V) ->
   <<?LWES_TYPE_DOUBLE:8/integer-unsigned-big, V:64/float>>;
-write (?LWES_LONG_STRING, V) when is_binary (V) ->
-  case iolist_size (V) of
-     BinLength when BinLength =< 4294967295 
-       -> <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big, 
-            BinLength:32/integer-unsigned-big, V/binary>>;
-     _ -> throw (binary_too_big)
-  end; 
+write (?LWES_LONG_STRING, V) when is_list(V); is_binary (V) ->
+  write (?LWES_LONG_STRING, iolist_size (V), V);
 write (?LWES_U_INT_16_ARRAY, V) ->
   Len = length (V),
   V2 = lists:foldl (
@@ -707,6 +696,21 @@ write (?LWES_N_STRING_ARRAY, V) ->
     Len:16/integer-unsigned-big,  Len:16/integer-unsigned-big,
     LwesBitsetBin/binary, Data/binary>>.
 
+write (?LWES_STRING, Len, V) when is_list (V); is_binary (V) ->
+  case Len of
+    SL when SL >= 0, SL =< 65535 ->
+      [ <<?LWES_TYPE_STRING:8/integer-unsigned-big,
+          SL:16/integer-unsigned-big>>, V ];
+    _ ->
+      throw (string_too_big)
+  end;
+write (?LWES_LONG_STRING, Len, V) when is_list(V); is_binary (V) ->
+  case Len of
+    SL when SL =< 4294967295 
+       -> <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big, 
+            SL:32/integer-unsigned-big, V/binary>>;
+     _ -> throw (string_too_big)
+  end.
 
 read_name (Binary) ->
   <<Length:8/integer-unsigned-big,
