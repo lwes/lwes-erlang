@@ -1,3 +1,7 @@
+Version 2.4.0 (vikramkadi)
+  * New type long_string added to support strings bigger than
+  * 65kb 
+
 Version 2.3.1 (molinaro)
   * there was an encoding bug with string types
 
