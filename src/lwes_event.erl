@@ -229,8 +229,10 @@ set_ndouble_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
 set_ndouble_array(_,_,_) ->
   erlang:error(badarg).
 
-
-
+% allow for re-emission of events, by just returning a binary if given
+% a binary
+to_binary (Event) when is_binary (Event) ->
+  Event;
 to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   case Attrs of
     Dict when is_tuple (Attrs) andalso element (1, Attrs) =:= dict ->
