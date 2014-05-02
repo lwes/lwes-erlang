@@ -248,8 +248,10 @@ to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   end.
 
 peek_name_from_udp ({ udp, _, _, _, Packet }) ->
-  { EventName, _ } = read_name (Packet),
-  EventName.
+  case read_name (Packet) of
+    { ok, EventName, _ } -> EventName;
+    E -> E
+  end.
 
 from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
   Extra =
@@ -297,7 +299,7 @@ from_binary (Binary, Format) ->
 %%====================================================================
 
 from_binary (Binary, Format, Accum0) ->
-  { EventName, Attrs } = read_name (Binary),
+  { ok, EventName, Attrs } = read_name (Binary),
   case Format of
     json ->
       AttrList = read_attrs (Attrs, json, Accum0),
@@ -714,12 +716,13 @@ write (?LWES_LONG_STRING, Len, V) when is_list(V); is_binary (V) ->
      _ -> throw (string_too_big)
   end.
 
-read_name (Binary) ->
-  <<Length:8/integer-unsigned-big,
-    EventName:Length/binary,
-    _NumAttrs:16/integer-unsigned-big,
-    Rest/binary>> = Binary,
-  { EventName, Rest }.
+read_name (<<Length:8/integer-unsigned-big,
+             EventName:Length/binary,
+             _NumAttrs:16/integer-unsigned-big,
+             Rest/binary>>) ->
+  { ok, EventName, Rest };
+read_name (_) ->
+  { error, malformed_event }.
 
 read_attrs (<<>>, _Format, Accum) ->
   Accum;

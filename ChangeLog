@@ -1,5 +1,6 @@
 Version 2.5.0 (molinaro)
   * allow for easy re-emission of events without deserializing
+  * prevent some malformed events
 
 Version 2.4.0 (vikramkadi)
   * New type long_string added to support strings bigger than
