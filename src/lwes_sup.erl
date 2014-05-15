@@ -2,10 +2,6 @@
 
 -behaviour (supervisor).
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export([start_link/0]).
 
@@ -53,7 +49,8 @@ init([]) ->
 %-=====================================================================-
 %-                            Test Functions                           -
 %-=====================================================================-
--ifdef(EUNIT).
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 lwes_sup_test_ () ->
   { setup,

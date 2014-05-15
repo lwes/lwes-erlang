@@ -2,10 +2,6 @@
 
 -behaviour (supervisor).
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export ([ start_link/0,
            open_channel/1 ]).
@@ -47,6 +43,7 @@ init([]) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 -endif.

@@ -1086,8 +1086,8 @@ is_arr_type (T) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 new_test_ () ->
   [
@@ -1112,7 +1112,7 @@ long_string_test () ->
          ))). 
 
 large_bin () -> 
-  lists:foldl (fun (X, A) -> 
+  lists:foldl (fun (_, A) -> 
                  <<1:8, A/binary>>
                end,
                << >>, 

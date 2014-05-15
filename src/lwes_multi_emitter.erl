@@ -9,10 +9,6 @@
 
 -include ("lwes_internal.hrl").
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export ([ open/1,
            emit/2,
@@ -144,6 +140,7 @@ allm (M, N) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 -endif.

@@ -5,10 +5,6 @@
 -include_lib ("lwes.hrl").
 -include ("lwes_internal.hrl").
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export ([ start_link/1,
            open/2,
@@ -209,6 +205,7 @@ find_and_cast (Channel, Msg) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 -endif.

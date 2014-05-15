@@ -12,10 +12,6 @@
 
 -behaviour (gen_server).
 
--ifdef(HAVE_EUNIT).
--include_lib("eunit/include/eunit.hrl").
--endif.
-
 %% API
 -export ([ start_link/1,
            process_event/2,
@@ -171,6 +167,7 @@ seconds_since_epoch () ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(EUNIT).
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 -endif.

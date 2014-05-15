@@ -1,3 +1,6 @@
+Version 3.0.1 (molinaro)
+  * fix eunit test from old refactor
+
 Version 3.0.0 (molinaro)
   * allow for easy re-emission of events without deserializing
   * prevent some malformed events (breaks backward compatibility for users of

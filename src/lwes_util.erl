@@ -103,8 +103,8 @@ binary_to_any (List, atom) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
 
 normalize_ip_test_ () ->
   [
