@@ -1,0 +1,12 @@
+#!/bin/sh
+
+deps=
+for d in deps/* ; do
+  deps="$deps -pa $d/ebin"
+done
+exec erl \
+  -name lwes -setcookie lwes \
+  $deps \
+  -pa ebin \
+  -s reloader \
+  -s lwes_app

@@ -1,6 +1,7 @@
 -ifndef(_lwes_internal_included).
 -define(_lwes_internal_included, yup).
 
+-define (is_ttl (V), V >= 0, V =< 32).
 -define (is_int16 (V), V >= -32768, V =< 32767).
 -define (is_uint16 (V), V >= 0, V =< 65535).
 -define (is_int32 (V), V >= -2147483648, V =< 2147483647).
@@ -26,7 +27,13 @@
           element (4,V) =< 255)).
 
 
--record (lwes_channel, {ip, port, is_multicast, type, ref}).
+-record (lwes_channel, {ip,
+                        port,
+                        is_multicast,
+                        ttl = 5,
+                        type,
+                        ref
+                       }).
 -record (lwes_multi_emitter, {type, m, n}).
 
 -endif.

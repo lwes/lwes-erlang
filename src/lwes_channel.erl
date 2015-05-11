@@ -32,6 +32,17 @@
 start_link (Channel) ->
   gen_server:start_link (?MODULE, [Channel], []).
 
+open (Type, {Ip, Port, TTL}) ->
+  Channel = #lwes_channel {
+              ip = Ip,
+              port = Port,
+              is_multicast = is_multicast (Ip),
+              ttl = TTL,
+              type = Type,
+              ref = make_ref ()
+            },
+  { ok, _Pid } = lwes_channel_manager:open_channel (Channel),
+  { ok, Channel};
 open (Type, {Ip, Port}) ->
   Channel = #lwes_channel {
               ip = Ip,
@@ -63,6 +74,7 @@ init ([ Channel = #lwes_channel {
                     ip = Ip,
                     port = Port,
                     is_multicast = IsMulticast,
+                    ttl = TTL,
                     type = Type
                  }
       ]) ->
@@ -72,7 +84,7 @@ init ([ Channel = #lwes_channel {
         gen_udp:open ( Port,
                        [ { reuseaddr, true },
                          { ip, Ip },
-                         { multicast_ttl, 4 },
+                         { multicast_ttl, TTL },
                          { multicast_loop, false },
                          { add_membership, {Ip, {0,0,0,0}}},
                          { recbuf, 100 * 65535 },
@@ -84,10 +96,19 @@ init ([ Channel = #lwes_channel {
                          binary
                        ]);
       {_, _} ->
-        gen_udp:open ( 0,
-                       [ { recbuf, 100 * 65535 },
-                         binary
-                       ])
+        case IsMulticast of
+          true ->
+            gen_udp:open ( 0,
+                           [ { recbuf, 100 * 65535 },
+                             { multicast_ttl, TTL },
+                             binary
+                           ]);
+          false ->
+            gen_udp:open ( 0,
+                           [ { recbuf, 100 * 65535 },
+                             binary
+                           ])
+        end
     end,
   lwes_channel_manager:register_channel (Channel, self()),
   { ok, #state { socket = Socket,

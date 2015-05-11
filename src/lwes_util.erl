@@ -32,6 +32,15 @@ normalize_ip (_) ->
 ip2bin (Ip) ->
   list_to_binary(inet_parse:ntoa (Ip)).
 
+check_ip_port ({Ip, Port, TTL})
+    when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
+  {Ip, Port, TTL};
+check_ip_port ({Ip, Port, TTL})
+    when is_list (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
+  case inet_parse:address (Ip) of
+    {ok, {N1, N2, N3, N4}} -> {{N1, N2, N3, N4}, Port, TTL};
+    _ -> erlang:error(badarg)
+  end;
 check_ip_port ({Ip, Port}) when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) ->
   {Ip, Port};
 check_ip_port ({Ip, Port}) when is_list (Ip) andalso ?is_uint16 (Port) ->
