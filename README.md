@@ -1,7 +1,7 @@
 Light Weight Event System (LWES)
 ================================
-For more information about lwes, see http://www.lwes.org/, for more information
-about using lwes from erlang read on.
+Click [here](http://lwes.github.io) for more information about lwes.
+For more information about using lwes from erlang read on.
 
 Creating Events
 -------------------------
