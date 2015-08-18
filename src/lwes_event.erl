@@ -46,13 +46,11 @@
          from_binary/1,
          from_binary/2,
          peek_name_from_udp/1,
+         has_header_fields/1,
          from_json/1,
          to_json/1,
          to_json/2,
-         test_packet/1,
-         test_text/0,
-         remove_attr/2,
-         nested_event/1
+         remove_attr/2
         ]).
 
 -define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
@@ -258,58 +256,76 @@ peek_name_from_udp ({ udp, _, _, _, Packet }) ->
     E -> E
   end.
 
+has_header_fields (B) when is_binary(B) ->
+  Size = erlang:byte_size (B),
+  % I need to check for the following at the end of the event binary
+  % int64   ReceiptTime =    1 (short string length)
+  %                       + 11 (length of string)
+  %                       +  1 (length of type byte)
+  %                       +  8 (length of int64)
+  %                       = 21
+  % ip_addr SenderIp    = 1 + 8 + 1 + 4 = 14
+  % uint16  SenderPort  = 1 + 10 + 1 + 2 = 14
+  %
+  % So total bytes at the end are 21+14+14 = 49
+  NumberToSkip = Size - 49,
+
+  case B of
+    <<_:NumberToSkip/bytes,                      % skip beginning
+      11:8/integer-unsigned-big,                 % length of "ReceiptTime" 11
+      "ReceiptTime",                             %
+      ?LWES_TYPE_INT_64:8/integer-unsigned-big,  % type byte
+      _:64/integer-signed-big,                   % value
+      8:8/integer-unsigned-big,                  % length of "SenderIP" 8
+      "SenderIP",                                %
+      ?LWES_TYPE_IP_ADDR:8/integer-unsigned-big, % type byte
+      _:32/integer-unsigned-big,                 % value
+      10:8/integer-unsigned-big,                 % length of "SenderPort" 10
+      "SenderPort",                              %
+      ?LWES_TYPE_U_INT_16:8/integer-unsigned-big,% type byte
+      _:16/integer-unsigned-big>> ->             % value
+      true;
+    _ ->
+      false
+  end.
+
 from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
+  ReceiptTime = millisecond_since_epoch (),
+  % only add header fields if they have not been added by upstream
   Extra =
-    case Format of
-      tagged ->
-        [ { ?LWES_IP_ADDR,  <<"SenderIP">>,   SenderIP },
-          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-          { ?LWES_INT_64,   <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      dict ->
-        dict:from_list (
-          [ { <<"SenderIP">>,   SenderIP },
-            { <<"SenderPort">>, SenderPort },
-            { <<"ReceiptTime">>, millisecond_since_epoch () } ]);
-      json ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_untyped ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_typed ->
-        [ { ?LWES_IP_ADDR, <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_proplist ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_proplist_untyped ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_proplist_typed ->
-        [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
-          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_eep18 ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_eep18_untyped ->
-        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      json_eep18_typed ->
-        [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
-          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
-      _ ->
-        [ { <<"SenderIP">>,   SenderIP },
-          { <<"SenderPort">>, SenderPort },
-          { <<"ReceiptTime">>, millisecond_since_epoch () } ]
+    case has_header_fields (Packet) of
+      true -> [];
+      false ->
+        case Format of
+          tagged ->
+            [ { ?LWES_IP_ADDR,  <<"SenderIP">>,   SenderIP },
+              { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+              { ?LWES_INT_64,   <<"ReceiptTime">>, ReceiptTime } ];
+          dict ->
+            dict:from_list (
+              [ { <<"SenderIP">>,   SenderIP },
+                { <<"SenderPort">>, SenderPort },
+                { <<"ReceiptTime">>, ReceiptTime } ]);
+          F when F =:= json;
+                 F =:= json_untyped;
+                 F =:= json_proplist;
+                 F =:= json_proplist_untyped;
+                 F =:= json_eep18;
+                 F =:= json_eep18_untyped  ->
+            [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
+              { <<"SenderPort">>, SenderPort },
+              { <<"ReceiptTime">>, ReceiptTime } ];
+          F when F =:= json_typed;
+                 F =:= json_proplist_typed;
+                 F =:= json_eep18_typed ->
+            [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
+              { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+              { ?LWES_INT_64, <<"ReceiptTime">>, ReceiptTime } ];
+          _ ->
+            [ { <<"SenderIP">>,   SenderIP },
+              { <<"SenderPort">>, SenderPort },
+              { <<"ReceiptTime">>, ReceiptTime } ]
+        end
     end,
   from_binary (Packet, Format, Extra).
 
@@ -1185,6 +1201,9 @@ remove_attr (A, D) ->
   dict:erase (A, D).
 
 
+-ifdef (TEST).
+-include_lib ("eunit/include/eunit.hrl").
+
 test_packet (binary) ->
   %% captured from a java emitter at some point
   <<4,84,101,115,116,0,25,3,101,110,99,2,0,1,15,84,
@@ -1811,8 +1830,6 @@ nested_event (json_eep18_typed) ->
 test_text () ->
   <<"{\"EventName\":\"Test\",\"typed\":{\"SenderPort\":{\"type\":\"uint16\",\"value\":\"58206\"},\"SenderIP\":{\"type\":\"ip_addr\",\"value\":\"192.168.54.1\"},\"enc\":{\"type\":\"int16\",\"value\":\"1\"},\"TestStringArray\":{\"type\":\"string_array\",\"value\":[\"foo\",\"bar\",\"baz\"]},\"float_array\":{\"type\":\"float_array\",\"value\":[\"1.00000001490116119385e-01\",\"2.00000002980232238770e-01\",\"3.00000011920928955078e-01\",\"4.00000005960464477539e-01\"]},\"TestBool\":{\"type\":\"boolean\",\"value\":\"false\"},\"TestInt32\":{\"type\":\"int32\",\"value\":\"14000\"},\"TestDouble\":{\"type\":\"double\",\"value\":\"1.23122997581958770752e-01\"},\"TestInt64\":{\"type\":\"int64\",\"value\":\"3234\"},\"TestUInt16\":{\"type\":\"uint16\",\"value\":\"10\"},\"TestFloat\":{\"type\":\"float\",\"value\":\"1.22299998998641967773e-01\"},\"TestUInt32Array\":{\"type\":\"uint32_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"TestInt32Array\":{\"type\":\"int32_array\",\"value\":[\"123\",\"45422\",\"34333\"]},\"TestIPAddress\":{\"type\":\"ip_addr\",\"value\":\"127.0.0.1\"},\"TestUInt32\":{\"type\":\"uint32\",\"value\":\"232343\"},\"TestInt64Array\":{\"type\":\"int64_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"byte_array\":{\"type\":\"byte_array\",\"value\":[\"10\",\"13\",\"43\",\"43\",\"200\"]},\"TestString\":{\"type\":\"string\",\"value\":\"foo\"},\"TestUInt64Array\":{\"type\":\"uint64_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"TestUInt16Array\":{\"type\":\"uint16_array\",\"value\":[\"123\",\"45422\",\"34333\"]},\"double\":{\"type\":\"double_array\",\"value\":[\"1.23232002258300781250e+02\",\"1.23123245239257812500e+02\",\"4.33344306945800781250e+01\"]},\"BoolArray\":{\"type\":\"boolean_array\",\"value\":[\"true\",\"false\",\"false\",\"true\"]},\"TestInt16Array\":{\"type\":\"int16_array\",\"value\":[\"10\",\"23\",\"23\",\"43\"]},\"byte\":{\"type\":\"byte\",\"value\":\"20\"},\"TestUInt64\":{\"type\":\"uint64\",\"value\":\"12312323\"},\"TestIPAddressArray\":{\"type\":\"ip_addr_array\",\"value\":[\"129.168.1.1\",\"129.168.1.2\",\"129.168.1.3\",\"129.168.1.4\"]},\"TestInt16\":{\"type\":\"int16\",\"value\":\"20\"}}}">>.
 
--ifdef (TEST).
--include_lib ("eunit/include/eunit.hrl").
 
 json_formats () ->
   [
@@ -2091,19 +2108,53 @@ nested_json_test_ () ->
   ].
 
 from_json_test () ->
-  #lwes_event{name=_,attrs=AttributesFromJson} =
-    lwes_event:from_json(lwes_event:test_text()),
-  #lwes_event{name=_,attrs=AttributesFromTest} =
-    lwes_event:test_packet(tagged),
+  #lwes_event{name=_,attrs=AttributesFromJson} = from_json(test_text()),
+  #lwes_event{name=_,attrs=AttributesFromTest} = test_packet(tagged),
   ?assertEqual(lists:sort(AttributesFromJson),
                lists:sort(
-                 lwes_event:remove_attr(<<"ReceiptTime">>,AttributesFromTest))).
-% E = #lwes_event{name = <<"test">>,
-%                 attrs = [{string,<<"foo">>,<<"bar">>},
-%                          {int64,<<"ReceiptTime">>,1439587738948},
-%                          {ip_addr,<<"SenderIP">>,{192,168,54,1}},
-%                          {uint16,<<"SenderPort">>,58206}]},
-% B = lwes_event:to_binary(E),
-% lwes_event:from_udp_packet({udp,port,{127,0,0,1},24442,B},tagged).
+                 remove_attr(<<"ReceiptTime">>,AttributesFromTest))).
+
+check_headers_test_ () ->
+  PacketWithHeaders =
+    <<19,77,111,110,68,101,109,97,110,100,58,58,83,116,97,116,115,
+      77,115,103,0,14,7,99,116,120,116,95,118,48,5,0,15,111,112,101,
+      110,120,45,100,101,118,46,108,111,99,97,108,7,99,116,120,116,
+      95,107,48,5,0,4,104,111,115,116,8,99,116,120,116,95,110,117,
+      109,1,0,1,2,116,49,5,0,5,103,97,117,103,101,2,118,49,7,0,0,0,
+      0,0,0,2,208,2,107,49,5,0,9,114,116,113,95,98,121,116,101,115,
+      2,116,48,5,0,5,103,97,117,103,101,2,118,48,7,0,0,0,0,6,64,0,0,
+      2,107,48,5,0,13,114,116,113,95,109,97,120,95,98,121,116,101,
+      115,3,110,117,109,1,0,2,7,112,114,111,103,95,105,100,5,0,4,
+      114,105,97,107,11,82,101,99,101,105,112,116,84,105,109,101,7,
+      0,0,1,79,66,126,41,176,8,83,101,110,100,101,114,73,80,6,128,
+      101,16,172,10,83,101,110,100,101,114,80,111,114,116,1,135,217>>,
+  PacketWithoutHeaders =
+    <<19,77,111,110,68,101,109,97,110,100,58,58,83,116,97,116,115,
+      77,115,103,0,14,7,99,116,120,116,95,118,48,5,0,15,111,112,101,
+      110,120,45,100,101,118,46,108,111,99,97,108,7,99,116,120,116,
+      95,107,48,5,0,4,104,111,115,116,8,99,116,120,116,95,110,117,
+      109,1,0,1,2,116,49,5,0,5,103,97,117,103,101,2,118,49,7,0,0,0,
+      0,0,0,2,208,2,107,49,5,0,9,114,116,113,95,98,121,116,101,115,
+      2,116,48,5,0,5,103,97,117,103,101,2,118,48,7,0,0,0,0,6,64,0,0,
+      2,107,48,5,0,13,114,116,113,95,109,97,120,95,98,121,116,101,
+      115,3,110,117,109,1,0,2,7,112,114,111,103,95,105,100,5,0,4,
+      114,105,97,107>>,
+  [
+    ?_assertEqual (has_header_fields (PacketWithHeaders), true),
+    ?_assertEqual (has_header_fields (PacketWithoutHeaders), false),
+    fun () ->
+      E1 = #lwes_event{name = <<"test">>,
+                       attrs = [
+                          {uint16,<<"SenderPort">>,58206},
+                          {ip_addr,<<"SenderIP">>,{192,168,54,1}},
+                          {int64,<<"ReceiptTime">>,1439587738948},
+                          {string,<<"foo">>,<<"bar">>}
+                       ]},
+      B1 = lwes_event:to_binary(E1),
+      ?assertEqual (has_header_fields (B1), true),
+      E2 = lwes_event:from_udp_packet({udp,port,{127,0,0,1},24442,B1},tagged),
+      ?assertEqual (E1, E2)
+    end
+  ].
 
 -endif.
