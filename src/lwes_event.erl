@@ -2,7 +2,7 @@
 
 -include_lib ("lwes.hrl").
 -include_lib ("lwes_internal.hrl").
-  
+
 %% API
 -export([new/1,
          set_uint16/3,
@@ -47,8 +47,13 @@
          from_binary/2,
          peek_name_from_udp/1,
          from_json/1,
-         to_json/1, 
-         to_json/2]).
+         to_json/1,
+         to_json/2,
+         test_packet/1,
+         test_text/0,
+         remove_attr/2,
+         nested_event/1
+        ]).
 
 -define (write_nullable_array (LwesType,Guard,BinarySize,BinaryType, V ),
    Len = length (V),
@@ -65,9 +70,9 @@
       LwesBitsetBin/binary, Data/binary>>
     ).
 
--define (read_nullable_array (Bin, LwesType, ElementSize), 
+-define (read_nullable_array (Bin, LwesType, ElementSize),
     <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-    {NotNullCount, BitsetLength, Bitset} = decode_bitset(AL, Rest), 
+    {NotNullCount, BitsetLength, Bitset} = decode_bitset(AL, Rest),
     Count = NotNullCount * ElementSize,
     <<_:BitsetLength, Values:Count/bits, Rest2/binary>> = Rest,
     { read_n_array (LwesType, AL, 1, Bitset ,Values, Format, []), Rest2 }).
@@ -269,14 +274,38 @@ from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
         [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_untyped ->
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
+          { <<"SenderPort">>, SenderPort },
+          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_typed ->
+        [ { ?LWES_IP_ADDR, <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
+          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
       json_proplist ->
         [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_proplist_untyped ->
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
+          { <<"SenderPort">>, SenderPort },
+          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_proplist_typed ->
+        [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
+          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
       json_eep18 ->
         [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
           { <<"SenderPort">>, SenderPort },
           { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_eep18_untyped ->
+        [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
+          { <<"SenderPort">>, SenderPort },
+          { <<"ReceiptTime">>, millisecond_since_epoch () } ];
+      json_eep18_typed ->
+        [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
+          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+          { ?LWES_INT_64, <<"ReceiptTime">>, millisecond_since_epoch () } ];
       _ ->
         [ { <<"SenderIP">>,   SenderIP },
           { <<"SenderPort">>, SenderPort },
@@ -285,7 +314,7 @@ from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
   from_binary (Packet, Format, Extra).
 
 from_binary (B) when is_binary (B) ->
-  from_binary (B, record).
+  from_binary (B, list).
 
 from_binary (<<>>, _) ->
   undefined;
@@ -297,19 +326,24 @@ from_binary (Binary, Format) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-
 from_binary (Binary, Format, Accum0) ->
   { ok, EventName, Attrs } = read_name (Binary),
   case Format of
     json ->
       AttrList = read_attrs (Attrs, json, Accum0),
-      [{<<"EventName">>, EventName} | AttrList ];
-    json_untyped -> 
+      {struct, [{<<"EventName">>, EventName} | AttrList ]};
+    json_untyped ->
       AttrList = read_attrs (Attrs, json, Accum0),
-      [{<<"EventName">>, EventName} | AttrList];
-    json_typed -> 
+      {struct, [{<<"EventName">>, EventName} | AttrList]};
+    json_typed ->
       AttrList = read_attrs (Attrs, json_typed, Accum0),
-      [{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]];
+      {struct,
+       [ {<<"EventName">>, EventName},
+         {<<"typed">>,
+          {struct, export_attributes(json_typed, AttrList)}
+         }
+       ]
+      };
     json_proplist ->
       AttrList = read_attrs (Attrs, json_proplist, Accum0),
       [{<<"EventName">>, EventName} | AttrList ];
@@ -318,16 +352,20 @@ from_binary (Binary, Format, Accum0) ->
       [{<<"EventName">>, EventName} | AttrList ];
     json_proplist_typed ->
       AttrList = read_attrs (Attrs, json_proplist_typed, Accum0),
-      [{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]];
+      [{<<"EventName">>, EventName},
+       {<<"typed">>, export_attributes(json_proplist_typed, AttrList)}
+      ];
     json_eep18 ->
       AttrList = read_attrs (Attrs, json_eep18, Accum0),
-      {[{<<"EventName">>, EventName} | AttrList ] };
+      {[{<<"EventName">>, EventName} | AttrList ]};
     json_eep18_untyped ->
       AttrList = read_attrs (Attrs, json_eep18, Accum0),
-      {[{<<"EventName">>, EventName} | AttrList ] };
+      {[{<<"EventName">>, EventName} | AttrList ]};
     json_eep18_typed ->
       AttrList = read_attrs (Attrs, json_eep18_typed, Accum0),
-      {[{<<"EventName">>, EventName} | [export_attributes(typed, AttrList)]]};
+      {[{<<"EventName">>, EventName},
+        {<<"typed">>, {export_attributes(json_eep18_typed, AttrList)}}
+       ]};
     _ ->
       AttrList = read_attrs (Attrs, Format, Accum0),
       #lwes_event { name = EventName, attrs = AttrList }
@@ -335,12 +373,12 @@ from_binary (Binary, Format, Accum0) ->
 
 split_bounds(Index, Bitset) ->
   Size = size(Bitset) * 8,
-  L = Size - Index, 
-  R = Index - 1, 
+  L = Size - Index,
+  R = Index - 1,
   {L, R}.
 
 lwes_bitset_rep (Len, Bitset) ->
-  Padding = (erlang:byte_size(Bitset) * 8) - Len, 
+  Padding = (erlang:byte_size(Bitset) * 8) - Len,
   BitsetBin = <<0:Padding, Bitset/bitstring>>,
     reverse_bytes_in_bin(BitsetBin).
 
@@ -350,7 +388,7 @@ reverse_bytes_in_bin (Bitset) ->
           binary:bin_to_list(Bitset))).
 
 decode_bitset(AL, Bin) ->
-  BitsetLength = lwes_util:ceiling( AL/8 ) * 8, 
+  BitsetLength = lwes_util:ceiling( AL/8 ) * 8,
   <<Bitset:BitsetLength/bitstring, _/bitstring>> = Bin,
   {lwes_util:count_ones(Bitset), BitsetLength, reverse_bytes_in_bin(Bitset)}.
 
@@ -424,10 +462,10 @@ write_attrs ([{K,V} | Rest], Accum) when ?is_uint64 (V) ->
 write_attrs ([{K,V} | Rest], Accum) when is_boolean (V) ->
   write_attrs (Rest, [ write_key (K), write (?LWES_BOOLEAN, V) | Accum ]);
 write_attrs ([{K,V} | Rest], Accum) when is_atom (V); is_binary (V) ->
-  case V of 
-    A when is_atom (A) -> 
+  case V of
+    A when is_atom (A) ->
        write_attrs (Rest, [ write_key (K), write (?LWES_STRING, V) | Accum ]);
-    _ -> 
+    _ ->
        case iolist_size (V) of
          SL when SL >= 0, SL =< 65535 ->
            write_attrs (Rest, [ write_key (K), write (?LWES_STRING, SL, V) | Accum ]);
@@ -467,6 +505,36 @@ get_type (H) when ?is_uint32 (H)  -> ?LWES_U_INT_32_ARRAY;
 get_type (H) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
 get_type (H) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
 get_type (H) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY.
+
+infer_type ([H|_]) when is_boolean(H) -> ?LWES_BOOLEAN_ARRAY;
+%% BYTE ARRAY IS INDISTINGUISHABLE FROM
+%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
+%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
+%% THEN USE THE THREE-TUPLE FORM.
+infer_type ([H|_]) when ?is_string (H)  -> ?LWES_STRING_ARRAY;
+infer_type ([H|_]) when ?is_byte (H)    -> ?LWES_STRING;
+infer_type ([H|_]) when is_float (H)    -> ?LWES_DOUBLE_ARRAY;
+infer_type ([H|_]) when ?is_int16 (H)   -> ?LWES_INT_16_ARRAY;
+infer_type ([H|_]) when ?is_uint16 (H)  -> ?LWES_U_INT_16_ARRAY;
+infer_type ([H|_]) when ?is_int32 (H)   -> ?LWES_INT_32_ARRAY;
+infer_type ([H|_]) when ?is_uint32 (H)  -> ?LWES_U_INT_32_ARRAY;
+infer_type ([H|_]) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
+infer_type ([H|_]) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
+infer_type ([H|_]) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY;
+infer_type (H) when is_boolean (H) -> ?LWES_BOOLEAN;
+%% BYTE ARRAY IS INDISTINGUISHABLE FROM
+%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
+%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
+%% THEN USE THE THREE-TUPLE FORM.
+infer_type (H) when ?is_string (H) -> ?LWES_STRING;
+infer_type (H) when is_float (H)   -> ?LWES_DOUBLE;
+infer_type (H) when ?is_int16 (H)  -> ?LWES_INT_16;
+infer_type (H) when ?is_uint16 (H) -> ?LWES_U_INT_16;
+infer_type (H) when ?is_int32 (H)  -> ?LWES_INT_32;
+infer_type (H) when ?is_uint32 (H) -> ?LWES_U_INT_32;
+infer_type (H) when ?is_int64 (H)  -> ?LWES_INT_64;
+infer_type (H) when ?is_uint64 (H) -> ?LWES_U_INT_64;
+infer_type (H) when ?is_ip_addr (H)-> ?LWES_IP_ADDR.
 
 rank_type (undefined)            ->  0;
 rank_type (?LWES_U_INT_16_ARRAY) ->  1;
@@ -686,10 +754,10 @@ write (?LWES_N_STRING_ARRAY, V) ->
   V1 = string_array_to_binary (V),
   {Bitset, Data} = lists:foldl (
   fun (undefined , {BitAccum, DataAccum}) -> {<<0:1, BitAccum/bitstring>>, DataAccum};
-      (X, {BitAccum, DataAccum}) -> 
+      (X, {BitAccum, DataAccum}) ->
       case iolist_size (X) of
         SL when SL >= 0, SL =< 65535 ->
-            {<<1:1, BitAccum/bitstring>>, 
+            {<<1:1, BitAccum/bitstring>>,
             <<DataAccum/binary, SL:16/integer-unsigned-big, X/binary>>};
         _ ->
           throw (string_too_big)
@@ -710,8 +778,8 @@ write (?LWES_STRING, Len, V) when is_list (V); is_binary (V) ->
   end;
 write (?LWES_LONG_STRING, Len, V) when is_list(V); is_binary (V) ->
   case Len of
-    SL when SL =< 4294967295 
-       -> <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big, 
+    SL when SL =< 4294967295
+       -> <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big,
             SL:32/integer-unsigned-big, V/binary>>;
      _ -> throw (string_too_big)
   end.
@@ -736,47 +804,23 @@ read_attrs (Bin, Format, Accum) ->
                    dict:store (K, V, Accum);
                  tagged ->
                    [ {type_to_atom (T), K, V} | Accum ];
-                 json ->
-                   [ {K, try lwes_mochijson2:decode (V, [{format, struct}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                 F when F=:= json; F =:= json_untyped ->
+                   [ {K, value_from_json (Format, V) }
                      | Accum ];
                  json_typed ->
-                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, struct}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                   [ {type_to_atom(T), K, value_from_json (Format, V) }
                      | Accum ];
-                 json_proplist ->
-                   [ {K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                 F when F =:= json_proplist; F =:= json_proplist_untyped ->
+                   [ {K, value_from_json (Format, V) }
                      | Accum ];
                  json_proplist_typed ->
-                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, proplist}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                   [ {type_to_atom(T), K, value_from_json (Format, V) }
                      | Accum ];
-                 json_eep18 ->
-                   [ {K, try lwes_mochijson2:decode (V, [{format, eep18}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                 F when F =:= json_eep18; F =:= json_eep18_untyped ->
+                   [ {K, value_from_json (Format, V) }
                      | Accum ];
                  json_eep18_typed ->
-                   [ {type_to_atom(T), K, try lwes_mochijson2:decode (V, [{format, eep18}]) of
-                           S -> S
-                         catch
-                           _:_ -> V
-                         end }
+                   [ {type_to_atom(T), K, value_from_json (Format, V) }
                      | Accum ];
                  _ ->
                    [ {K, V} | Accum ]
@@ -904,7 +948,7 @@ read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin, Format) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_BOOLEAN, 8);
 read_value (?LWES_TYPE_N_STRING_ARRAY, Bin, _) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest), 
+  {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest),
   <<_:Bitset_Length, Rest2/binary>> = Rest,
   read_n_string_array (AL, 1, Bitset, Rest2, []);
 read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin, Format) ->
@@ -955,62 +999,50 @@ string_array_to_binary ([ H | T ], Acc) when is_list (H) ->
 string_array_to_binary ([ H | T ], Acc) when is_atom (H) ->
   case H of
     undefined -> string_array_to_binary (T, [ undefined ] ++ Acc);
-    _ -> string_array_to_binary (T, 
+    _ -> string_array_to_binary (T,
                     [ list_to_binary (atom_to_list (H)) ] ++ Acc)
   end;
 string_array_to_binary (_, _) ->
   erlang:error (badarg).
 
 to_json(Bin) when is_binary (Bin) ->
-  to_json(from_binary(Bin, json_eep18_typed), json_typed_string);
-to_json(Event= #lwes_event{name=_, attrs=_}) -> 
-  to_json(Event, json_typed_string).
+  from_binary(Bin, json_eep18_typed);
+to_json(Event= #lwes_event{name=_, attrs=_}) ->
+  to_json(Event, json_eep18_typed).
 
 to_json (Bin, Format) when is_binary (Bin) ->
   from_binary (Bin, Format);
-to_json (Event = #lwes_event {name = _, attrs= _}, json_typed_string) ->
-  lwes_mochijson2:encode (to_json(Event, json_typed));
-to_json (_Event = #lwes_event {name = Name, attrs= Attrs}, json_typed) ->
-  {[{<<"name">>, Name } | [export_attributes(typed, Attrs)]]};
-to_json (Event = #lwes_event {name = Name, attrs= _}, Format) ->
-  {[{<<"name">>, Name } | 
-   [{<<"attributes">>, from_binary (to_binary (Event), Format)}]]}.
+to_json (Event, Format) ->
+  from_binary (to_binary (Event), Format).
 
+export_attribute (Format, {Key, Value}) ->
+  Type = infer_type (Value),
+  export_attribute (Format, {Type, Key, Value});
+export_attribute (json_typed, {Type, _, Value}) ->
+  {struct, [ {<<"type">>, Type},
+             {<<"value">>, make_binary (Type, Value)} ] };
+export_attribute (json_proplist_typed, {Type, _, Value}) ->
+  [{<<"type">>, Type},
+   {<<"value">>, make_binary (Type, Value)}];
+export_attribute (json_eep18_typed, {Type, _, Value}) ->
+  {[{<<"type">>, Type},
+    {<<"value">>, make_binary (Type, Value)}]}.
 
-export_attributes(typed, Attrs) ->
-  { <<"typed">>,
-    { lists:foldl (
-      fun ({T,N,V}, A) when T =:= ?LWES_IP_ADDR ->
-            [ { N, [ {<<"type">>, T},
-                     {<<"value">>, lwes_util:ip2bin (V) }
-                   ]
-              }
-              | A
-            ];
-          ({T,N,V}, A) when T =:= ?LWES_IP_ADDR_ARRAY ->
-            [ { N, [ {<<"type">>, T},
-                     {<<"value">>, lwes_util:arr_to_binary(V, ipaddr) }
-                   ]
-              }
-              | A
-            ];
-          ({T,N,V}, A) ->
-            [ { N, [ {<<"type">>, T},
-                     {<<"value">>, make_binary (T, V) }
-                   ]
-              }
-              | A
-            ]
-      end,
-      [],
-      Attrs)
-    }
-  }.
+export_attributes(Format, Attrs) ->
+  lists:foldl (
+    fun
+      (E = {Key, _}, A) ->
+        [ {Key, export_attribute (Format, E)} | A];
+      (E = {_, Key, _}, A) ->
+        [ {Key, export_attribute (Format, E)} | A]
+    end,
+    [],
+    Attrs).
 
 from_json(Bin) when is_list(Bin); is_binary(Bin) ->
   from_json (lwes_mochijson2:decode (Bin, [{format, eep18}]));
 from_json ({Json}) ->
-  Name = proplists:get_value (<<"name">>, Json),
+  Name = proplists:get_value (<<"EventName">>, Json),
   {TypedAttrs} = proplists:get_value (<<"typed">>, Json),
   #lwes_event {
     name = Name,
@@ -1018,15 +1050,45 @@ from_json ({Json}) ->
   }.
 
 make_binary(Type, Value) ->
-  case is_arr_type(Type) of 
+  case is_arr_type(Type) of
     true -> lwes_util:arr_to_binary(Value);
     false -> lwes_util:any_to_binary(Value)
   end.
 
+value_from_json (Format, Value)
+  when Format =:= json;
+       Format =:= json_untyped;
+       Format =:= json_typed ->
+  try lwes_mochijson2:decode (Value, [{format, struct}]) of
+    S -> S
+  catch
+    _:_ -> Value
+  end;
+value_from_json (Format, Value)
+  when Format =:= json_proplist;
+       Format =:= json_proplist_untyped;
+       Format =:= json_proplist_typed ->
+  try lwes_mochijson2:decode (Value, [{format, proplist}]) of
+    S -> S
+  catch
+    _:_ -> Value
+  end;
+value_from_json (Format, Value)
+  when Format =:= json_eep18;
+       Format =:= json_eep18_untyped;
+       Format =:= json_eep18_typed ->
+  try lwes_mochijson2:decode (Value, [{format, eep18}]) of
+    S -> S
+  catch
+    _:_ -> Value
+  end.
 
 process_one ({Key, {Attrs}}) ->
-  Type =
-    lwes_util:binary_to_any (proplists:get_value (<<"type">>, Attrs), atom),
+  Type = case proplists:get_value (<<"type">>, Attrs) of
+           A when is_atom(A) -> A;
+           B when is_binary(B) ->
+             lwes_util:binary_to_any (B, atom)
+         end,
   Value = proplists:get_value (<<"value">>, Attrs),
   NewValue =
     case Type of
@@ -1038,7 +1100,7 @@ process_one ({Key, {Attrs}}) ->
       ?LWES_INT_64 -> lwes_util:binary_to_any (Value, integer);
       ?LWES_IP_ADDR -> lwes_util:binary_to_any (Value, ipaddr);
       ?LWES_BOOLEAN -> lwes_util:binary_to_any (Value, atom);
-      ?LWES_STRING -> lwes_util:binary_to_any (Value, list);
+      ?LWES_STRING -> lwes_util:binary_to_any (Value, binary);
       ?LWES_BYTE -> lwes_util:binary_to_any (Value, integer);
       ?LWES_FLOAT -> lwes_util:binary_to_any (Value, float);
       ?LWES_DOUBLE -> lwes_util:binary_to_any (Value, float);
@@ -1054,8 +1116,8 @@ process_one ({Key, {Attrs}}) ->
       ?LWES_N_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
       ?LWES_U_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
       ?LWES_N_U_INT_64_ARRAY -> lwes_util:binary_to_arr (Value, integer);
-      ?LWES_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
-      ?LWES_N_STRING_ARRAY -> lwes_util:binary_to_arr (Value, list);
+      ?LWES_STRING_ARRAY -> lwes_util:binary_to_arr (Value, binary);
+      ?LWES_N_STRING_ARRAY -> lwes_util:binary_to_arr (Value, binary);
       ?LWES_IP_ADDR_ARRAY -> lwes_util:binary_to_arr (Value, ipaddr);
       ?LWES_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
       ?LWES_N_BOOLEAN_ARRAY -> lwes_util:binary_to_arr (Value, atom);
@@ -1086,20 +1148,796 @@ is_arr_type (T) ->
 %%====================================================================
 %% Test functions
 %%====================================================================
+remove_attr (A, #lwes_event { name = N, attrs = L }) ->
+  #lwes_event { name = N, attrs = remove_attr (A, L) };
+remove_attr (A, {L}) when is_list (L) ->
+  {remove_attr (A, L)};
+remove_attr (A, {struct, L}) when is_list (L) ->
+  {struct, remove_attr (A, L)};
+remove_attr (A, L) when is_list (L) ->
+  case lists:keyfind (<<"typed">>, 1, L) of
+    false ->
+      % for proplist style lists
+      case lists:keydelete(A, 1, L) of
+        L ->
+          % for tagged style lists
+          lists:keydelete(A, 2, L);
+        L2 ->
+          L2
+      end;
+    % deal with typed lists below
+    {_, L2} when is_list(L2) ->
+      lists:keyreplace (<<"typed">>,1,L,
+                        {<<"typed">>,
+                          lists:keydelete (A,1,L2)
+                        });
+    {_, {L2}} when is_list (L2) ->
+      lists:keyreplace (<<"typed">>,1,L,
+                        {<<"typed">>,
+                          {lists:keydelete (A,1,L2)}
+                        });
+    {_,{struct,L3}} when is_list (L3) ->
+      lists:keyreplace (<<"typed">>,1,L,
+                        {<<"typed">>,
+                         {struct, lists:keydelete (A,1,L3)}})
+  end;
+remove_attr (A, D) ->
+  dict:erase (A, D).
+
+
+test_packet (binary) ->
+  %% captured from a java emitter at some point
+  <<4,84,101,115,116,0,25,3,101,110,99,2,0,1,15,84,
+    101,115,116,83,116,114,105,110,103,65,114,114,
+    97,121,133,0,3,0,3,102,111,111,0,3,98,97,114,0,
+    3,98,97,122,11,102,108,111,97,116,95,97,114,114,
+    97,121,139,0,4,61,204,204,205,62,76,204,205,62,
+    153,153,154,62,204,204,205,8,84,101,115,116,66,
+    111,111,108,9,0,9,84,101,115,116,73,110,116,51,
+    50,4,0,0,54,176,10,84,101,115,116,68,111,117,98,
+    108,101,12,63,191,132,253,32,0,0,0,9,84,101,115,
+    116,73,110,116,54,52,7,0,0,0,0,0,0,12,162,10,84,
+    101,115,116,85,73,110,116,49,54,1,0,10,9,84,101,
+    115,116,70,108,111,97,116,11,61,250,120,108,15,
+    84,101,115,116,85,73,110,116,51,50,65,114,114,
+    97,121,131,0,3,0,0,48,34,1,239,43,17,0,20,6,67,
+    14,84,101,115,116,73,110,116,51,50,65,114,114,
+    97,121,132,0,3,0,0,0,123,0,0,177,110,0,0,134,29,
+    13,84,101,115,116,73,80,65,100,100,114,101,115,
+    115,6,1,0,0,127,10,84,101,115,116,85,73,110,116,
+    51,50,3,0,3,139,151,14,84,101,115,116,73,110,
+    116,54,52,65,114,114,97,121,135,0,3,0,0,0,0,0,0,
+    48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,6,67,10,
+    98,121,116,101,95,97,114,114,97,121,138,0,5,10,
+    13,43,43,200,10,84,101,115,116,83,116,114,105,
+    110,103,5,0,3,102,111,111,15,84,101,115,116,85,
+    73,110,116,54,52,65,114,114,97,121,136,0,3,0,0,
+    0,0,0,0,48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,
+    6,67,15,84,101,115,116,85,73,110,116,49,54,65,
+    114,114,97,121,129,0,3,0,123,177,110,134,29,6,
+    100,111,117,98,108,101,140,0,3,64,94,206,217,32,
+    0,0,0,64,94,199,227,64,0,0,0,64,69,170,206,160,
+    0,0,0,9,66,111,111,108,65,114,114,97,121,137,0,
+    4,1,0,0,1,14,84,101,115,116,73,110,116,49,54,65,
+    114,114,97,121,130,0,4,0,10,0,23,0,23,0,43,4,98,
+    121,116,101,10,20,10,84,101,115,116,85,73,110,
+    116,54,52,8,0,0,0,0,0,187,223,3,18,84,101,115,
+    116,73,80,65,100,100,114,101,115,115,65,114,114,
+    97,121,134,0,4,1,1,168,129,2,1,168,129,3,1,168,
+    129,4,1,168,129,9,84,101,115,116,73,110,116,49,
+    54,2,0,20>>;
+test_packet (raw) ->
+  {udp,port, {192,168,54,1}, 58206, test_packet(binary)};
+test_packet (list) ->
+  #lwes_event { name = <<"Test">>,
+               attrs = [{<<"TestInt16">>,20},
+                        {<<"TestIPAddressArray">>,
+                         [{129,168,1,1},{129,168,1,2},
+                          {129,168,1,3},{129,168,1,4}]},
+                        {<<"TestUInt64">>,12312323},
+                        {<<"byte">>,20},
+                        {<<"TestInt16Array">>,[10,23,23,43]},
+                        {<<"BoolArray">>,[true,false,false,true]},
+                        {<<"double">>,
+                         [123.23200225830078,123.12324523925781,
+                          43.33443069458008]},
+                        {<<"TestUInt16Array">>,[123,45422,34333]},
+                        {<<"TestUInt64Array">>,[12322,32451345,1312323]},
+                        {<<"TestString">>,<<"foo">>},
+                        {<<"byte_array">>,[10,13,43,43,200]},
+                        {<<"TestInt64Array">>,[12322,32451345,1312323]},
+                        {<<"TestUInt32">>,232343},
+                        {<<"TestIPAddress">>,{127,0,0,1}},
+                        {<<"TestInt32Array">>,[123,45422,34333]},
+                        {<<"TestUInt32Array">>,[12322,32451345,1312323]},
+                        {<<"TestFloat">>,0.12229999899864197},
+                        {<<"TestUInt16">>,10},
+                        {<<"TestInt64">>,3234},
+                        {<<"TestDouble">>,0.12312299758195877},
+                        {<<"TestInt32">>,14000},
+                        {<<"TestBool">>,false},
+                        {<<"float_array">>,
+                         [0.10000000149011612,0.20000000298023224,
+                          0.30000001192092896, 0.4000000059604645]},
+                        {<<"TestStringArray">>,[<<"foo">>,<<"bar">>,<<"baz">>]},
+                        {<<"enc">>,1},
+                        {<<"SenderIP">>,{192,168,54,1}},
+                        {<<"SenderPort">>,58206},
+                        {<<"ReceiptTime">>,1439588532973}]
+  };
+test_packet (tagged) ->
+  #lwes_event { name = <<"Test">>,
+               attrs = [ {int16,<<"TestInt16">>,20},
+                         {ip_addr_array,<<"TestIPAddressArray">>,
+                           [{129,168,1,1}, {129,168,1,2}, {129,168,1,3},
+                            {129,168,1,4}]},
+                        {uint64,<<"TestUInt64">>,12312323},
+                        {byte,<<"byte">>,20},
+                        {int16_array,<<"TestInt16Array">>,[10,23,23,43]},
+                        {boolean_array,<<"BoolArray">>,
+                         [true,false,false,true]},
+                        {double_array,<<"double">>,
+                         [123.23200225830078,123.12324523925781,
+                          43.33443069458008]},
+                        {uint16_array,<<"TestUInt16Array">>,[123,45422,34333]},
+                        {uint64_array,<<"TestUInt64Array">>,[12322,32451345,1312323]},
+                        {string,<<"TestString">>,<<"foo">>},
+                        {byte_array,<<"byte_array">>,[10,13,43,43,200]},
+                        {int64_array,<<"TestInt64Array">>,[12322,32451345,1312323]},
+                        {uint32,<<"TestUInt32">>,232343},
+                        {ip_addr,<<"TestIPAddress">>,{127,0,0,1}},
+                        {int32_array,<<"TestInt32Array">>,[123,45422,34333]},
+                        {uint32_array,<<"TestUInt32Array">>,[12322,32451345,1312323]},
+                        {float,<<"TestFloat">>,0.12229999899864197},
+                        {uint16,<<"TestUInt16">>,10},
+                        {int64,<<"TestInt64">>,3234},
+                        {double,<<"TestDouble">>,0.12312299758195877},
+                        {int32,<<"TestInt32">>,14000},
+                        {boolean,<<"TestBool">>,false},
+                        {float_array,<<"float_array">>,
+                         [0.10000000149011612,0.20000000298023224,
+                          0.30000001192092896,0.4000000059604645]},
+                        {string_array,<<"TestStringArray">>,
+                         [<<"foo">>,<<"bar">>,<<"baz">>]},
+                        {int16,<<"enc">>,1},
+                        {ip_addr,<<"SenderIP">>,{192,168,54,1}},
+                        {uint16,<<"SenderPort">>,58206},
+                        {int64,<<"ReceiptTime">>,1439587738948}
+                       ]
+              };
+test_packet (dict) ->
+  #lwes_event {
+    name = <<"Test">>,
+    attrs =
+      {dict,28,16,16,8,80,48,
+       {[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]},
+       {{[[<<"SenderPort">>|58206],
+          [<<"ReceiptTime">>|1439588321444]],
+         [[<<"TestDouble">>|0.12312299758195877],
+          [<<"TestUInt32Array">>,12322,32451345,1312323]],
+         [],
+         [[<<"TestUInt16Array">>,123,45422,34333],
+          [<<"TestInt16">>|20]],
+         [[<<"TestBool">>|false],
+          [<<"TestIPAddress">>|{127,0,0,1}],
+          [<<"BoolArray">>,true,false,false,true],
+          [<<"TestUInt64">>|12312323]],
+         [[<<"enc">>|1],[<<"TestUInt32">>|232343]],
+         [],[],
+         [[<<"SenderIP">>|{192,168,54,1}],
+          [<<"TestInt64Array">>,12322,32451345,1312323],
+          [<<"TestIPAddressArray">>,
+           {129,168,1,1},
+           {129,168,1,2},
+           {129,168,1,3},
+           {129,168,1,4}]],
+         [[<<"TestString">>|<<"foo">>]],
+         [],
+         [[<<"TestUInt16">>|10],
+          [<<"TestFloat">>|0.12229999899864197],
+          [<<"TestInt32Array">>,123,45422,34333]],
+         [[<<"TestInt64">>|3234],
+          [<<"byte_array">>,10,13,43,43,200],
+          [<<"byte">>|20]],
+         [[<<"TestStringArray">>,<<"foo">>,<<"bar">>,<<"baz">>],
+          [<<"float_array">>,0.10000000149011612,
+           0.20000000298023224,0.30000001192092896,
+           0.4000000059604645],
+          [<<"TestInt32">>|14000],
+          [<<"TestInt16Array">>,10,23,23,43]],
+         [[<<"TestUInt64Array">>,12322,32451345,1312323]],
+         [[<<"double">>,123.23200225830078,123.12324523925781,
+           43.33443069458008]]}}}
+    };
+test_packet (json) ->
+  {struct,
+    [ {<<"EventName">>,<<"Test">>},
+      {<<"TestInt16">>,20},
+      {<<"TestIPAddressArray">>,
+         [<<"129.168.1.1">>, <<"129.168.1.2">>, <<"129.168.1.3">>,
+          <<"129.168.1.4">>]},
+      {<<"TestUInt64">>,12312323},
+      {<<"byte">>,20},
+      {<<"TestInt16Array">>,[10,23,23,43]},
+      {<<"BoolArray">>,[true,false,false,true]},
+      {<<"double">>,[123.23200225830078,123.12324523925781,43.33443069458008]},
+      {<<"TestUInt16Array">>,[123,45422,34333]},
+      {<<"TestUInt64Array">>,[12322,32451345,1312323]},
+      {<<"TestString">>,<<"foo">>},
+      {<<"byte_array">>,[10,13,43,43,200]},
+      {<<"TestInt64Array">>,[12322,32451345,1312323]},
+      {<<"TestUInt32">>,232343},
+      {<<"TestIPAddress">>,<<"127.0.0.1">>},
+      {<<"TestInt32Array">>,[123,45422,34333]},
+      {<<"TestUInt32Array">>,[12322,32451345,1312323]},
+      {<<"TestFloat">>,0.12229999899864197},
+      {<<"TestUInt16">>,10},
+      {<<"TestInt64">>,3234},
+      {<<"TestDouble">>,0.12312299758195877},
+      {<<"TestInt32">>,14000},
+      {<<"TestBool">>,false},
+      {<<"float_array">>,
+         [0.10000000149011612,0.20000000298023224,0.30000001192092896,
+             0.4000000059604645]},
+      {<<"TestStringArray">>,[<<"foo">>,<<"bar">>,<<"baz">>]},
+      {<<"enc">>,1},
+      {<<"SenderIP">>,<<"192.168.54.1">>},
+      {<<"SenderPort">>,58206},
+      {<<"ReceiptTime">>,1439588435888}
+    ]
+  };
+test_packet (json_untyped) ->
+  test_packet (json);
+test_packet (json_typed) ->
+  {struct,
+    [{<<"EventName">>,<<"Test">>},
+     {<<"typed">>,
+      {struct,
+       [{<<"ReceiptTime">>,
+         {struct,[{<<"type">>,int64},{<<"value">>,<<"1439585933710">>}]}
+        },
+        {<<"SenderPort">>,
+         {struct,[{<<"type">>,uint16},{<<"value">>,<<"58206">>}]}
+        },
+        {<<"SenderIP">>,
+         {struct,[{<<"type">>,ip_addr},{<<"value">>,<<"192.168.54.1">>}]}
+        },
+        {<<"enc">>,
+         {struct,[{<<"type">>,int16},{<<"value">>,<<"1">>}]}
+        },
+        {<<"TestStringArray">>,
+         {struct,[{<<"type">>,string_array},
+                  {<<"value">>,[<<"foo">>,<<"bar">>,<<"baz">>]}]}
+        },
+        {<<"float_array">>,
+         {struct,
+          [{<<"type">>,float_array},
+           {<<"value">>,
+            [<<"1.00000001490116119385e-01">>,<<"2.00000002980232238770e-01">>,
+             <<"3.00000011920928955078e-01">>,<<"4.00000005960464477539e-01">>]
+           }
+          ]}
+        },
+        {<<"TestBool">>,
+         {struct,[{<<"type">>,boolean},{<<"value">>,<<"false">>}]}
+        },
+        {<<"TestInt32">>,
+         {struct,[{<<"type">>,int32},{<<"value">>,<<"14000">>}]}
+        },
+        {<<"TestDouble">>,
+         {struct,[{<<"type">>,double},
+                  {<<"value">>,<<"1.23122997581958770752e-01">>}]}
+        },
+        {<<"TestInt64">>,
+         {struct,[{<<"type">>,int64},{<<"value">>,<<"3234">>}]}
+        },
+        {<<"TestUInt16">>,
+         {struct,[{<<"type">>,uint16},{<<"value">>,<<"10">>}]}},
+        {<<"TestFloat">>,
+         {struct,[{<<"type">>,float},
+                  {<<"value">>,<<"1.22299998998641967773e-01">>}]}
+        },
+        {<<"TestUInt32Array">>,
+         {struct, [{<<"type">>,uint32_array},
+                   {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}
+        },
+        {<<"TestInt32Array">>,
+         {struct, [{<<"type">>,int32_array},
+                   {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]}
+        },
+        {<<"TestIPAddress">>,
+         {struct, [{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]}
+        },
+        {<<"TestUInt32">>,
+         {struct, [{<<"type">>,uint32},{<<"value">>,<<"232343">>}]}
+        },
+        {<<"TestInt64Array">>,
+         {struct, [{<<"type">>,int64_array},
+                   {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}
+        },
+        {<<"byte_array">>,
+         {struct, [{<<"type">>,byte_array},
+                   {<<"value">>,[<<"10">>,<<"13">>,<<"43">>,
+                                 <<"43">>,<<"200">>]}]}
+        },
+        {<<"TestString">>,
+         {struct,[{<<"type">>,string},{<<"value">>,<<"foo">>}]}
+        },
+        {<<"TestUInt64Array">>,
+         {struct,[{<<"type">>,uint64_array},
+                  {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}
+        },
+        {<<"TestUInt16Array">>,
+         {struct, [{<<"type">>,uint16_array},
+                   {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]}
+        },
+        {<<"double">>,
+         {struct, [{<<"type">>,double_array},
+                   {<<"value">>,
+                    [<<"1.23232002258300781250e+02">>,
+                     <<"1.23123245239257812500e+02">>,
+                     <<"4.33344306945800781250e+01">>]}]}
+        },
+        {<<"BoolArray">>,
+         {struct, [{<<"type">>,boolean_array},
+                   {<<"value">>,[<<"true">>,<<"false">>,
+                                 <<"false">>,<<"true">>]}]}
+        },
+        {<<"TestInt16Array">>,
+         {struct, [{<<"type">>,int16_array},
+                   {<<"value">>,[<<"10">>,<<"23">>,<<"23">>,<<"43">>]}]}
+        },
+        {<<"byte">>,{struct, [{<<"type">>,byte},{<<"value">>,<<"20">>}]}},
+        {<<"TestUInt64">>,
+         {struct, [{<<"type">>,uint64},{<<"value">>,<<"12312323">>}]}
+        },
+        {<<"TestIPAddressArray">>,
+         {struct, [{<<"type">>,ip_addr_array},
+                   {<<"value">>,
+                    [<<"129.168.1.1">>,<<"129.168.1.2">>,<<"129.168.1.3">>,
+                     <<"129.168.1.4">>]}]}
+        },
+        {<<"TestInt16">>,
+         {struct, [{<<"type">>,int16},{<<"value">>,<<"20">>}]}}
+       ]
+      }
+     }
+    ]
+  };
+test_packet (json_proplist) ->
+  [ {<<"EventName">>,<<"Test">>},
+    {<<"TestInt16">>,20},
+    {<<"TestIPAddressArray">>,
+       [<<"129.168.1.1">>, <<"129.168.1.2">>, <<"129.168.1.3">>,
+        <<"129.168.1.4">>]},
+    {<<"TestUInt64">>,12312323},
+    {<<"byte">>,20},
+    {<<"TestInt16Array">>,[10,23,23,43]},
+    {<<"BoolArray">>,[true,false,false,true]},
+    {<<"double">>,[123.23200225830078,123.12324523925781,43.33443069458008]},
+    {<<"TestUInt16Array">>,[123,45422,34333]},
+    {<<"TestUInt64Array">>,[12322,32451345,1312323]},
+    {<<"TestString">>,<<"foo">>},
+    {<<"byte_array">>,[10,13,43,43,200]},
+    {<<"TestInt64Array">>,[12322,32451345,1312323]},
+    {<<"TestUInt32">>,232343},
+    {<<"TestIPAddress">>,<<"127.0.0.1">>},
+    {<<"TestInt32Array">>,[123,45422,34333]},
+    {<<"TestUInt32Array">>,[12322,32451345,1312323]},
+    {<<"TestFloat">>,0.12229999899864197},
+    {<<"TestUInt16">>,10},
+    {<<"TestInt64">>,3234},
+    {<<"TestDouble">>,0.12312299758195877},
+    {<<"TestInt32">>,14000},
+    {<<"TestBool">>,false},
+    {<<"float_array">>,
+       [0.10000000149011612,0.20000000298023224,0.30000001192092896,
+           0.4000000059604645]},
+    {<<"TestStringArray">>,[<<"foo">>,<<"bar">>,<<"baz">>]},
+    {<<"enc">>,1},
+    {<<"SenderIP">>,<<"192.168.54.1">>},
+    {<<"SenderPort">>,58206},
+    {<<"ReceiptTime">>,1439588435888}
+  ];
+test_packet (json_proplist_untyped) ->
+  test_packet (json_proplist);
+test_packet (json_proplist_typed) ->
+  [{<<"EventName">>,<<"Test">>},
+   {<<"typed">>,
+    [{<<"ReceiptTime">>,[{<<"type">>,int64},{<<"value">>,<<"1439585933710">>}]},
+     {<<"SenderPort">>,[{<<"type">>,uint16},{<<"value">>,<<"58206">>}]},
+     {<<"SenderIP">>,[{<<"type">>,ip_addr},{<<"value">>,<<"192.168.54.1">>}]},
+     {<<"enc">>,[{<<"type">>,int16},{<<"value">>,<<"1">>}]},
+     {<<"TestStringArray">>,
+      [{<<"type">>,string_array},
+       {<<"value">>,[<<"foo">>,<<"bar">>,<<"baz">>]}]},
+     {<<"float_array">>,
+      [{<<"type">>,float_array},
+       {<<"value">>,
+        [<<"1.00000001490116119385e-01">>,<<"2.00000002980232238770e-01">>,
+         <<"3.00000011920928955078e-01">>,<<"4.00000005960464477539e-01">>]}]
+     },
+     {<<"TestBool">>,[{<<"type">>,boolean},{<<"value">>,<<"false">>}]},
+     {<<"TestInt32">>,[{<<"type">>,int32},{<<"value">>,<<"14000">>}]},
+     {<<"TestDouble">>,
+      [{<<"type">>,double},{<<"value">>,<<"1.23122997581958770752e-01">>}]},
+     {<<"TestInt64">>,[{<<"type">>,int64},{<<"value">>,<<"3234">>}]},
+     {<<"TestUInt16">>,[{<<"type">>,uint16},{<<"value">>,<<"10">>}]},
+     {<<"TestFloat">>,
+      [{<<"type">>,float},{<<"value">>,<<"1.22299998998641967773e-01">>}]},
+     {<<"TestUInt32Array">>,
+      [{<<"type">>,uint32_array},
+       {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]},
+     {<<"TestInt32Array">>,
+      [{<<"type">>,int32_array},
+       {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]},
+     {<<"TestIPAddress">>,[{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]},
+     {<<"TestUInt32">>,[{<<"type">>,uint32},{<<"value">>,<<"232343">>}]},
+     {<<"TestInt64Array">>,
+      [{<<"type">>,int64_array},
+       {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]},
+     {<<"byte_array">>,
+      [{<<"type">>,byte_array},
+       {<<"value">>,[<<"10">>,<<"13">>,<<"43">>,<<"43">>,<<"200">>]}]},
+     {<<"TestString">>,[{<<"type">>,string},{<<"value">>,<<"foo">>}]},
+     {<<"TestUInt64Array">>,
+      [{<<"type">>,uint64_array},
+       {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]},
+     {<<"TestUInt16Array">>,
+      [{<<"type">>,uint16_array},
+       {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]},
+     {<<"double">>,
+      [{<<"type">>,double_array},
+       {<<"value">>,
+        [<<"1.23232002258300781250e+02">>,<<"1.23123245239257812500e+02">>,
+         <<"4.33344306945800781250e+01">>]}]},
+     {<<"BoolArray">>,
+      [{<<"type">>,boolean_array},
+       {<<"value">>,[<<"true">>,<<"false">>,<<"false">>,<<"true">>]}]},
+     {<<"TestInt16Array">>,
+      [{<<"type">>,int16_array},
+       {<<"value">>,[<<"10">>,<<"23">>,<<"23">>,<<"43">>]}]},
+     {<<"byte">>,[{<<"type">>,byte},{<<"value">>,<<"20">>}]},
+     {<<"TestUInt64">>,[{<<"type">>,uint64},{<<"value">>,<<"12312323">>}]},
+     {<<"TestIPAddressArray">>,
+      [{<<"type">>,ip_addr_array},
+       {<<"value">>,
+        [<<"129.168.1.1">>,<<"129.168.1.2">>,<<"129.168.1.3">>,
+         <<"129.168.1.4">>]}]},
+     {<<"TestInt16">>,[{<<"type">>,int16},{<<"value">>,<<"20">>}]}]
+   }
+  ];
+test_packet (json_eep18) ->
+  {test_packet (json_proplist)};
+test_packet (json_eep18_untyped) ->
+  test_packet (json_eep18);
+test_packet (json_eep18_typed) ->
+  {[{<<"EventName">>,<<"Test">>},
+    {<<"typed">>,
+     {[{ <<"ReceiptTime">>,
+         {[{<<"type">>,int64},{<<"value">>,<<"1439592736063">>}]}
+       },
+       { <<"SenderPort">>,
+         {[{<<"type">>,uint16},{<<"value">>,<<"58206">>}]}
+       },
+       { <<"SenderIP">>,
+         {[{<<"type">>,ip_addr},{<<"value">>,<<"192.168.54.1">>}]}
+       },
+       {<<"enc">>,{[{<<"type">>,int16},{<<"value">>,<<"1">>}]}},
+       {<<"TestStringArray">>,
+        {[{<<"type">>,string_array},
+          {<<"value">>,[<<"foo">>,<<"bar">>,<<"baz">>]}]}
+       },
+       {<<"float_array">>,
+        {[{<<"type">>,float_array},
+          {<<"value">>,
+           [<<"1.00000001490116119385e-01">>,<<"2.00000002980232238770e-01">>,
+            <<"3.00000011920928955078e-01">>,<<"4.00000005960464477539e-01">>]
+          }
+         ]}
+       },
+       {<<"TestBool">>,{[{<<"type">>,boolean},{<<"value">>,<<"false">>}]}},
+       {<<"TestInt32">>,{[{<<"type">>,int32},{<<"value">>,<<"14000">>}]}},
+       {<<"TestDouble">>,
+        {[{<<"type">>,double},{<<"value">>,<<"1.23122997581958770752e-01">>}]}},
+       {<<"TestInt64">>,{[{<<"type">>,int64},{<<"value">>,<<"3234">>}]}},
+       {<<"TestUInt16">>,{[{<<"type">>,uint16},{<<"value">>,<<"10">>}]}},
+       {<<"TestFloat">>,
+        {[{<<"type">>,float},{<<"value">>,<<"1.22299998998641967773e-01">>}]}},
+       {<<"TestUInt32Array">>,
+        {[{<<"type">>,uint32_array},
+          {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}
+       },
+       {<<"TestInt32Array">>,
+        {[{<<"type">>,int32_array},
+          {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]}},
+       {<<"TestIPAddress">>,
+        {[{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]}},
+       {<<"TestUInt32">>,{[{<<"type">>,uint32},{<<"value">>,<<"232343">>}]}},
+       {<<"TestInt64Array">>,
+        {[{<<"type">>,int64_array},
+          {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}},
+       {<<"byte_array">>,
+        {[{<<"type">>,byte_array},
+          {<<"value">>,[<<"10">>,<<"13">>,<<"43">>,<<"43">>,<<"200">>]}]}},
+       {<<"TestString">>,{[{<<"type">>,string},{<<"value">>,<<"foo">>}]}},
+       {<<"TestUInt64Array">>,
+        {[{<<"type">>,uint64_array},
+          {<<"value">>,[<<"12322">>,<<"32451345">>,<<"1312323">>]}]}},
+       {<<"TestUInt16Array">>,
+        {[{<<"type">>,uint16_array},
+          {<<"value">>,[<<"123">>,<<"45422">>,<<"34333">>]}]}},
+       {<<"double">>,
+        {[{<<"type">>,double_array},
+          {<<"value">>,
+           [<<"1.23232002258300781250e+02">>,<<"1.23123245239257812500e+02">>,
+            <<"4.33344306945800781250e+01">>]}]}},
+       {<<"BoolArray">>,
+        {[{<<"type">>,boolean_array},
+          {<<"value">>,[<<"true">>,<<"false">>,<<"false">>,<<"true">>]}]}},
+       {<<"TestInt16Array">>,
+        {[{<<"type">>,int16_array},
+          {<<"value">>,[<<"10">>,<<"23">>,<<"23">>,<<"43">>]}]}},
+       {<<"byte">>,{[{<<"type">>,byte},{<<"value">>,<<"20">>}]}},
+       {<<"TestUInt64">>,{[{<<"type">>,uint64},{<<"value">>,<<"12312323">>}]}},
+       {<<"TestIPAddressArray">>,
+        {[{<<"type">>,ip_addr_array},
+          {<<"value">>,
+           [<<"129.168.1.1">>,<<"129.168.1.2">>,<<"129.168.1.3">>,
+            <<"129.168.1.4">>]}]}},
+       {<<"TestInt16">>,{[{<<"type">>,int16},{<<"value">>,<<"20">>}]}}
+      ]
+     }
+    }
+   ]
+  }.
+
+nested_event (event) ->
+  #lwes_event {
+    name = <<"test">>,
+    attrs =
+      [ {<<"foo">>,<<"{\"bar\":\"baz\",\"bob\":5,\"inner\":{\"a\":5,\"b\":[1,2,3],\"c\":\"another\"}}">>},
+        {<<"other">>,<<"[1,2,3,4]">>},
+        {<<"ip">>, {127,0,0,1}}
+      ]
+    };
+nested_event (binary) ->
+  <<4,116,101,115,116,0,3,2,105,112,6,1,0,0,127,5,111,116,104,101,114,5,
+    0,9,91,49,44,50,44,51,44,52,93,3,102,111,111,5,0,63,123,34,98,97,114,34,
+    58,34,98,97,122,34,44,34,98,111,98,34,58,53,44,34,105,110,110,101,114,34,
+    58,123,34,97,34,58,53,44,34,98,34,58,91,49,44,50,44,51,93,44,34,99,34,58,
+    34,97,110,111,116,104,101,114,34,125,125>>;
+nested_event (json) ->
+  {struct,[{<<"EventName">>,<<"test">>},
+           {<<"foo">>,
+            {struct,[{<<"bar">>,<<"baz">>},
+                     {<<"bob">>,5},
+                     {<<"inner">>, {struct,[{<<"a">>,5},
+                                            {<<"b">>,[1,2,3]},
+                                            {<<"c">>,<<"another">>}]
+                                   }
+                     }
+                    ]
+            }
+           },
+           {<<"other">>,[1,2,3,4]},
+           {<<"ip">>,<<"127.0.0.1">>}
+          ]
+  };
+nested_event (json_untyped) ->
+  nested_event (json);
+nested_event (json_typed) ->
+  {struct,
+   [{<<"EventName">>,<<"test">>},
+    {<<"typed">>,
+     {struct,
+      [{<<"ip">>,
+        {struct,[{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]}},
+       {<<"other">>,
+        {struct,[{<<"type">>,string},{<<"value">>,<<1,2,3,4>>}]}},
+       {<<"foo">>,
+        {struct,
+         [{<<"type">>,string},
+          {<<"value">>,
+           {struct,
+            [{<<"bar">>,<<"baz">>},
+             {<<"bob">>,5},
+             {<<"inner">>,
+              {struct,
+               [{<<"a">>,5},
+                {<<"b">>,[1,2,3]},
+                {<<"c">>,<<"another">>}]}}]}}]}}]}}]};
+nested_event (json_proplist) ->
+  [{<<"EventName">>,<<"test">>},
+    {<<"foo">>,
+       [{<<"bar">>,<<"baz">>},
+        {<<"bob">>,5},
+        {<<"inner">>,
+          [{<<"a">>,5},
+           {<<"b">>,[1,2,3]},
+           {<<"c">>,<<"another">>}
+          ]
+        }
+       ]
+    },
+    {<<"other">>,[1,2,3,4]},
+    {<<"ip">>,<<"127.0.0.1">>}
+  ];
+nested_event (json_proplist_untyped) ->
+  nested_event (json_proplist);
+nested_event (json_proplist_typed) ->
+  [{<<"EventName">>,<<"test">>},
+   {<<"typed">>,
+    [{<<"ip">>,[{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]},
+     {<<"other">>,
+      [{<<"type">>,string},{<<"value">>,<<1,2,3,4>>}]},
+     {<<"foo">>,
+      [{<<"type">>,string},
+       {<<"value">>,
+        [{<<"bar">>,<<"baz">>},
+         {<<"bob">>,5},
+         {<<"inner">>,
+          [{<<"a">>,5},
+           {<<"b">>,[1,2,3]},
+           {<<"c">>,<<"another">>}]}]}]}]}];
+nested_event (json_eep18) ->
+  {[{<<"EventName">>,<<"test">>},
+    {<<"foo">>,
+     {[{<<"bar">>,<<"baz">>},
+       {<<"bob">>,5},
+       {<<"inner">>,
+        {[{<<"a">>,5},
+          {<<"b">>,[1,2,3]},
+          {<<"c">>,<<"another">>}]}}]}},
+    {<<"other">>,[1,2,3,4]},
+    {<<"ip">>,<<"127.0.0.1">>}]};
+nested_event (json_eep18_untyped) ->
+  nested_event (json_eep18);
+nested_event (json_eep18_typed) ->
+  {[{<<"EventName">>,<<"test">>},
+    {<<"typed">>,
+     {[{<<"ip">>,{[{<<"type">>,ip_addr},{<<"value">>,<<"127.0.0.1">>}]}},
+       {<<"other">>,{[{<<"type">>,string},{<<"value">>,<<1,2,3,4>>}]}},
+       {<<"foo">>,
+        {[{<<"type">>,string},
+          {<<"value">>,
+           {[{<<"bar">>,<<"baz">>},
+             {<<"bob">>,5},
+             {<<"inner">>,
+              {[{<<"a">>,5},
+                {<<"b">>,[1,2,3]},
+                {<<"c">>,<<"another">>}]}}]}}]}}]}}]}.
+
+test_text () ->
+  <<"{\"EventName\":\"Test\",\"typed\":{\"SenderPort\":{\"type\":\"uint16\",\"value\":\"58206\"},\"SenderIP\":{\"type\":\"ip_addr\",\"value\":\"192.168.54.1\"},\"enc\":{\"type\":\"int16\",\"value\":\"1\"},\"TestStringArray\":{\"type\":\"string_array\",\"value\":[\"foo\",\"bar\",\"baz\"]},\"float_array\":{\"type\":\"float_array\",\"value\":[\"1.00000001490116119385e-01\",\"2.00000002980232238770e-01\",\"3.00000011920928955078e-01\",\"4.00000005960464477539e-01\"]},\"TestBool\":{\"type\":\"boolean\",\"value\":\"false\"},\"TestInt32\":{\"type\":\"int32\",\"value\":\"14000\"},\"TestDouble\":{\"type\":\"double\",\"value\":\"1.23122997581958770752e-01\"},\"TestInt64\":{\"type\":\"int64\",\"value\":\"3234\"},\"TestUInt16\":{\"type\":\"uint16\",\"value\":\"10\"},\"TestFloat\":{\"type\":\"float\",\"value\":\"1.22299998998641967773e-01\"},\"TestUInt32Array\":{\"type\":\"uint32_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"TestInt32Array\":{\"type\":\"int32_array\",\"value\":[\"123\",\"45422\",\"34333\"]},\"TestIPAddress\":{\"type\":\"ip_addr\",\"value\":\"127.0.0.1\"},\"TestUInt32\":{\"type\":\"uint32\",\"value\":\"232343\"},\"TestInt64Array\":{\"type\":\"int64_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"byte_array\":{\"type\":\"byte_array\",\"value\":[\"10\",\"13\",\"43\",\"43\",\"200\"]},\"TestString\":{\"type\":\"string\",\"value\":\"foo\"},\"TestUInt64Array\":{\"type\":\"uint64_array\",\"value\":[\"12322\",\"32451345\",\"1312323\"]},\"TestUInt16Array\":{\"type\":\"uint16_array\",\"value\":[\"123\",\"45422\",\"34333\"]},\"double\":{\"type\":\"double_array\",\"value\":[\"1.23232002258300781250e+02\",\"1.23123245239257812500e+02\",\"4.33344306945800781250e+01\"]},\"BoolArray\":{\"type\":\"boolean_array\",\"value\":[\"true\",\"false\",\"false\",\"true\"]},\"TestInt16Array\":{\"type\":\"int16_array\",\"value\":[\"10\",\"23\",\"23\",\"43\"]},\"byte\":{\"type\":\"byte\",\"value\":\"20\"},\"TestUInt64\":{\"type\":\"uint64\",\"value\":\"12312323\"},\"TestIPAddressArray\":{\"type\":\"ip_addr_array\",\"value\":[\"129.168.1.1\",\"129.168.1.2\",\"129.168.1.3\",\"129.168.1.4\"]},\"TestInt16\":{\"type\":\"int16\",\"value\":\"20\"}}}">>.
+
 -ifdef (TEST).
 -include_lib ("eunit/include/eunit.hrl").
 
+json_formats () ->
+  [
+    json, json_untyped, json_typed,
+    json_proplist, json_proplist_untyped, json_proplist_typed,
+    json_eep18, json_eep18_untyped, json_eep18_typed
+  ].
+formats() -> [ list, tagged, dict | json_formats() ].
+
+
 new_test_ () ->
   [
-    ?_assertEqual (#lwes_event { name = "foo", attrs = []}, new (foo)),
-    ?_assertEqual (#lwes_event{name = "foo",attrs = [{int16,cat,-5}]},
+    ?_assertEqual (#lwes_event {name = "foo", attrs = []},
+                   new (foo)),
+    % INT16 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_16,cat,0}]},
+                   lwes_event:set_int16 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_16,cat,-5}]},
                    lwes_event:set_int16 (lwes_event:new(foo),cat,-5)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_16,cat,50}]},
+                   lwes_event:set_int16 (lwes_event:new(foo),cat,50)),
+    % INT16 bounds tests
     ?_assertError (badarg,
                    lwes_event:set_int16 (lwes_event:new(foo),cat,32768)),
-    ?_assertEqual (#lwes_event{name = "foo",attrs = [{uint16,cat,5}]},
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,5)),
     ?_assertError (badarg,
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,-5))
+                   lwes_event:set_int16 (lwes_event:new(foo),cat,-32769)),
+    % UINT16 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_16,cat,0}]},
+                   lwes_event:set_uint16 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_16,cat,5}]},
+                   lwes_event:set_uint16 (lwes_event:new(foo),cat,5)),
+    % UINT16 bounds tests
+    ?_assertError (badarg,
+                   lwes_event:set_uint16 (lwes_event:new(foo),cat,-5)),
+    ?_assertError (badarg,
+                   lwes_event:set_uint16 (lwes_event:new(foo),cat,65536)),
+    % INT32 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_32,cat,0}]},
+                   lwes_event:set_int32 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_32,cat,-5}]},
+                   lwes_event:set_int32 (lwes_event:new(foo),cat,-5)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_32,cat,50}]},
+                   lwes_event:set_int32 (lwes_event:new(foo),cat,50)),
+    % INT32 bounds tests
+    ?_assertError (badarg,
+                   lwes_event:set_int32 (lwes_event:new(foo),cat,2147483648)),
+    ?_assertError (badarg,
+                   lwes_event:set_int32 (lwes_event:new(foo),cat,-2147483649)),
+    % UINT32 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_32,cat,0}]},
+                   lwes_event:set_uint32 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_32,cat,50}]},
+                   lwes_event:set_uint32 (lwes_event:new(foo),cat,50)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_32,cat,4294967295}]},
+                   lwes_event:set_uint32 (lwes_event:new(foo),cat,4294967295)),
+    % UINT32 bounds tests
+    ?_assertError (badarg,
+                   lwes_event:set_uint32 (lwes_event:new(foo),cat,-5)),
+    ?_assertError (badarg,
+                   lwes_event:set_uint32 (lwes_event:new(foo),cat,4294967296)),
+    % INT64 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_64,cat,0}]},
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_64,cat,-5}]},
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,-5)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_64,cat,-9223372036854775808}]},
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,-9223372036854775808)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_64,cat,9223372036854775807}]},
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,9223372036854775807)),
+    % INT64 bounds tests
+    ?_assertError (badarg,
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,9223372036854775808)),
+    ?_assertError (badarg,
+                   lwes_event:set_int64 (lwes_event:new(foo),cat,-9223372036854775809)),
+    % UINT64 tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_64,cat,0}]},
+                   lwes_event:set_uint64 (lwes_event:new(foo),cat,0)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_64,cat,50}]},
+                   lwes_event:set_uint64 (lwes_event:new(foo),cat,50)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_64,cat,18446744073709551615}]},
+                   lwes_event:set_uint64 (lwes_event:new(foo),cat,18446744073709551615)),
+    % UINT64 bounds tests
+    ?_assertError (badarg,
+                   lwes_event:set_uint64 (lwes_event:new(foo),cat,-5)),
+    ?_assertError (badarg,
+                   lwes_event:set_uint64 (lwes_event:new(foo),cat,18446744073709551616)),
+    % BOOLEAN tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_BOOLEAN,cat,true}]},
+                   lwes_event:set_boolean (lwes_event:new(foo),cat,true)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_BOOLEAN,cat,false}]},
+                   lwes_event:set_boolean (lwes_event:new(foo),cat,false)),
+    ?_assertError (badarg,
+                   lwes_event:set_boolean (lwes_event:new(foo),cat,kinda)),
+    % IP_ADDR test
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
+                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,{127,0,0,1})),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
+                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,"127.0.0.1")),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
+                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,<<"127.0.0.1">>)),
+    ?_assertError (badarg,
+                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,"300.300.300.300"))
   ].
 
 long_string_test () ->
@@ -1109,13 +1947,13 @@ long_string_test () ->
      from_binary (
        to_binary (
          #lwes_event {name = <<"foo">>, attrs = [{ "bar", B}]}
-         ))). 
+         ))).
 
-large_bin () -> 
-  lists:foldl (fun (_, A) -> 
+large_bin () ->
+  lists:foldl (fun (_, A) ->
                  <<1:8, A/binary>>
                end,
-               << >>, 
+               << >>,
                lists:seq (1, 99999)).
 
 allow_atom_and_binary_for_strings_test_ () ->
@@ -1155,84 +1993,117 @@ set_nullable_array_test_ () ->
                     )
   ].
 
-write_read_nullarrays_test() ->
-  [ begin
+write_read_nullarrays_test_() ->
+  [ fun () ->
       W = write(Type, Arr),
       <<_:8/bits, Data/binary>> = W,
-      ?assertEqual({Arr, <<>>}, read_value(Type_Id, Data, 0))
+      ?assertEqual ({Arr, <<>>}, read_value(Type_Id, Data, 0))
     end
-      || {Type, Type_Id, Arr}
-      <- [
+    || {Type, Type_Id, Arr}
+    <- [
         {?LWES_N_U_INT_16_ARRAY, 141, [3, undefined, undefined, 500, 10]},
         {?LWES_N_INT_16_ARRAY, 142, [undefined, -1, undefined, -500, 10]},
-        {?LWES_N_U_INT_32_ARRAY, 143, [3, undefined, undefined, 500, 10]}, 
+        {?LWES_N_U_INT_32_ARRAY, 143, [3, undefined, undefined, 500, 10]},
         {?LWES_N_INT_32_ARRAY, 144, [undefined, -1, undefined, -500, 10]},
         {?LWES_N_U_INT_64_ARRAY, 148, [3, 1844674407370955161, undefined, 10]},
-        {?LWES_N_INT_64_ARRAY, 147, [undefined, undefined, -72036854775808]}, 
+        {?LWES_N_INT_64_ARRAY, 147, [undefined, undefined, -72036854775808]},
         {?LWES_N_BOOLEAN_ARRAY, 149, [true, false, undefined, true, true, false]},
         {?LWES_N_BYTE_ARRAY, 150, [undefined, undefined, undefined, 23, 72, 9]},
-        {?LWES_N_FLOAT_ARRAY, 151, [undefined, -2.25, undefined, 2.25]}, 
+        {?LWES_N_FLOAT_ARRAY, 151, [undefined, -2.25, undefined, 2.25]},
         {?LWES_N_DOUBLE_ARRAY, 152, [undefined, undefined, -1.25, 2.25]},
         {?LWES_N_STRING_ARRAY, 145, [undefined, <<"test">>, <<"should ">>, <<"pass">>]}
       ]
   ].
 
-string_nullable_arrays_test() ->
+string_nullable_arrays_test_ () ->
   [
-    ?assertEqual(write(?LWES_N_STRING_ARRAY, [undefined, "test", "should ", "pass"]), 
+    ?_assertEqual(write(?LWES_N_STRING_ARRAY, [undefined, "test", "should ", "pass"]),
                   <<145,0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>),
 
-    ?assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
+    ?_assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
                   read_value(?LWES_TYPE_N_STRING_ARRAY,
                     <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
   ].
 
-deserialize_test () ->
+serialize_test_ () ->
+  [
+    ?_assertEqual (to_binary(
+                     remove_attr(<<"ReceiptTime">>,
+                       remove_attr(<<"SenderIP">>,
+                         remove_attr(<<"SenderPort">>,
+                                     test_packet(tagged))))),
+                   test_packet(binary)),
+    fun () ->
+      E = #lwes_event { name = <<"test">>,
+                        attrs = dict:from_list([{<<"a">>,<<"b">>},{<<"c">>,1}])
+                      },
+      ?assertEqual (lwes_event:from_binary (lwes_event:to_binary(E),dict),
+                    E)
+    end
+  ].
+
+deserialize_test_ () ->
   %% THIS IS A SERIALIZED PACKET
   %% SENT FROM THE JAVA LIBRARY
   %% THAT CONTAINS ALL TYPES
-  JavaPacket = {udp,port,
-                            {192,168,54,1},
-                            58206,
-                            <<4,84,101,115,116,0,25,3,101,110,99,2,0,1,15,84,
-                              101,115,116,83,116,114,105,110,103,65,114,114,
-                              97,121,133,0,3,0,3,102,111,111,0,3,98,97,114,0,
-                              3,98,97,122,11,102,108,111,97,116,95,97,114,114,
-                              97,121,139,0,4,61,204,204,205,62,76,204,205,62,
-                              153,153,154,62,204,204,205,8,84,101,115,116,66,
-                              111,111,108,9,0,9,84,101,115,116,73,110,116,51,
-                              50,4,0,0,54,176,10,84,101,115,116,68,111,117,98,
-                              108,101,12,63,191,132,253,32,0,0,0,9,84,101,115,
-                              116,73,110,116,54,52,7,0,0,0,0,0,0,12,162,10,84,
-                              101,115,116,85,73,110,116,49,54,1,0,10,9,84,101,
-                              115,116,70,108,111,97,116,11,61,250,120,108,15,
-                              84,101,115,116,85,73,110,116,51,50,65,114,114,
-                              97,121,131,0,3,0,0,48,34,1,239,43,17,0,20,6,67,
-                              14,84,101,115,116,73,110,116,51,50,65,114,114,
-                              97,121,132,0,3,0,0,0,123,0,0,177,110,0,0,134,29,
-                              13,84,101,115,116,73,80,65,100,100,114,101,115,
-                              115,6,1,0,0,127,10,84,101,115,116,85,73,110,116,
-                              51,50,3,0,3,139,151,14,84,101,115,116,73,110,
-                              116,54,52,65,114,114,97,121,135,0,3,0,0,0,0,0,0,
-                              48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,6,67,10,
-                              98,121,116,101,95,97,114,114,97,121,138,0,5,10,
-                              13,43,43,200,10,84,101,115,116,83,116,114,105,
-                              110,103,5,0,3,102,111,111,15,84,101,115,116,85,
-                              73,110,116,54,52,65,114,114,97,121,136,0,3,0,0,
-                              0,0,0,0,48,34,0,0,0,0,1,239,43,17,0,0,0,0,0,20,
-                              6,67,15,84,101,115,116,85,73,110,116,49,54,65,
-                              114,114,97,121,129,0,3,0,123,177,110,134,29,6,
-                              100,111,117,98,108,101,140,0,3,64,94,206,217,32,
-                              0,0,0,64,94,199,227,64,0,0,0,64,69,170,206,160,
-                              0,0,0,9,66,111,111,108,65,114,114,97,121,137,0,
-                              4,1,0,0,1,14,84,101,115,116,73,110,116,49,54,65,
-                              114,114,97,121,130,0,4,0,10,0,23,0,23,0,43,4,98,
-                              121,116,101,10,20,10,84,101,115,116,85,73,110,
-                              116,54,52,8,0,0,0,0,0,187,223,3,18,84,101,115,
-                              116,73,80,65,100,100,114,101,115,115,65,114,114,
-                              97,121,134,0,4,1,1,168,129,2,1,168,129,3,1,168,
-                              129,4,1,168,129,9,84,101,115,116,73,110,116,49,
-                              54,2,0,20>>},
-  lwes_event:from_udp_packet(JavaPacket, json).
+  JavaPacket = test_packet(raw),
+  [
+    % peek name check
+    ?_assertEqual (<<"Test">>, peek_name_from_udp (JavaPacket)),
+    % peek name failure
+    ?_assertEqual ({error, malformed_event},
+                   peek_name_from_udp ({udp, port,
+                                        {192,168,54,1}, 58206,
+                                        <<4,84,101,115>>}))
+    | [
+        ?_assertEqual (
+          remove_attr (<<"ReceiptTime">>, from_udp_packet(JavaPacket, Format)),
+          remove_attr (<<"ReceiptTime">>, test_packet (Format))
+        ) || Format <- formats() ]
+  ].
+
+
+nested_json_test_ () ->
+  [
+    ?_assertEqual (to_binary(nested_event(event)), nested_event(binary)),
+    % check that all untyped types encode to the same json structure
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                   lwes_mochijson2:encode(nested_event(json_untyped))),
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                   lwes_mochijson2:encode(nested_event(json_proplist))),
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                   lwes_mochijson2:encode(nested_event(json_proplist_untyped))),
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                   lwes_mochijson2:encode(nested_event(json_eep18))),
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                   lwes_mochijson2:encode(nested_event(json_eep18_untyped))),
+    % check that all typed typed encode to the same json structure
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json_typed)),
+                   lwes_mochijson2:encode(nested_event(json_proplist_typed))),
+    ?_assertEqual (lwes_mochijson2:encode(nested_event(json_typed)),
+                   lwes_mochijson2:encode(nested_event(json_eep18_typed)))
+    | [
+        ?_assertEqual (to_json(nested_event(binary), Format),
+                       nested_event (Format))
+        || Format
+        <- json_formats()
+      ]
+  ].
+
+from_json_test () ->
+  #lwes_event{name=_,attrs=AttributesFromJson} =
+    lwes_event:from_json(lwes_event:test_text()),
+  #lwes_event{name=_,attrs=AttributesFromTest} =
+    lwes_event:test_packet(tagged),
+  ?assertEqual(lists:sort(AttributesFromJson),
+               lists:sort(
+                 lwes_event:remove_attr(<<"ReceiptTime">>,AttributesFromTest))).
+% E = #lwes_event{name = <<"test">>,
+%                 attrs = [{string,<<"foo">>,<<"bar">>},
+%                          {int64,<<"ReceiptTime">>,1439587738948},
+%                          {ip_addr,<<"SenderIP">>,{192,168,54,1}},
+%                          {uint16,<<"SenderPort">>,58206}]},
+% B = lwes_event:to_binary(E),
+% lwes_event:from_udp_packet({udp,port,{127,0,0,1},24442,B},tagged).
 
 -endif.

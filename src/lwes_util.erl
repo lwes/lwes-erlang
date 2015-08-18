@@ -20,6 +20,8 @@
 %%====================================================================
 normalize_ip (Ip) when ?is_ip_addr (Ip) ->
   Ip;
+normalize_ip (Ip) when is_binary (Ip) ->
+  normalize_ip (binary_to_list (Ip));
 normalize_ip (Ip) when is_list (Ip) ->
   case inet_parse:address (Ip) of
     {ok, {N1, N2, N3, N4}} -> {N1, N2, N3, N4};
@@ -29,8 +31,10 @@ normalize_ip (_) ->
   % essentially turns function_clause error into badarg
   erlang:error (badarg).
 
+ip2bin (Ip) when is_binary (Ip) ->
+  Ip;
 ip2bin (Ip) ->
-  list_to_binary(inet_parse:ntoa (Ip)).
+  list_to_binary (inet_parse:ntoa (Ip)).
 
 check_ip_port ({Ip, Port, TTL})
     when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
@@ -71,27 +75,39 @@ arr_to_binary (L, ipaddr) ->
 arr_to_binary (L) ->
   [any_to_binary (E) || E <- L ].
 
+any_to_binary (Ip) when ?is_ip_addr (Ip) ->
+  ip2bin (Ip);
+any_to_binary (T) when is_tuple (T) ->
+  T;
 any_to_binary (I) when is_integer (I) ->
   list_to_binary (integer_to_list (I));
 any_to_binary (F) when is_float (F) ->
   list_to_binary (float_to_list (F));
+any_to_binary (L = [H|_]) when is_tuple (H) ->
+  L;
 any_to_binary (L = [[_|_]|_]) when is_list (L) ->
   % support list of lists, being turned into list of binaries 
-  [ list_to_binary (E) || E <- L ];
+  [ any_to_binary (E) || E <- L ];
 any_to_binary (L) when is_list (L) ->
   list_to_binary (L);
 any_to_binary (A) when is_atom (A) ->
   list_to_binary (atom_to_list (A));
 any_to_binary (B) when is_binary (B) ->
-  B.   
+  B.
 
 binary_to_arr (List, Type) ->
-  [ case E of 
+  [ case E of
       null -> undefined;
-         _ -> binary_to_any(E, Type) end || E <- List ].
+         _ -> binary_to_any(E, Type)
+    end
+    || E
+    <- List
+  ].
 
 binary_to_any (Bin, binary) when is_binary (Bin) ->
   Bin;
+binary_to_any (L = [B|_], binary) when is_binary (B) ->
+  L;
 binary_to_any (Bin, Type) when is_binary (Bin) ->
   binary_to_any (binary_to_list (Bin), Type);
 binary_to_any (List, integer) ->
@@ -117,16 +133,22 @@ binary_to_any (List, atom) ->
 
 normalize_ip_test_ () ->
   [
+    ?_assertEqual ({127,0,0,1}, normalize_ip (<<"127.0.0.1">>)),
     ?_assertEqual ({127,0,0,1}, normalize_ip ("127.0.0.1")),
     ?_assertEqual ({127,0,0,1}, normalize_ip ({127,0,0,1})),
+    ?_assertError (badarg, normalize_ip (<<"655.0.0.1">>)),
     ?_assertError (badarg, normalize_ip ("655.0.0.1")),
     ?_assertError (badarg, normalize_ip ({655,0,0,1}))
   ].
 
-check_ip_port_test () ->
+check_ip_port_test_ () ->
   [
+    ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({"127.0.0.1",9191,3})),
+    ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({{127,0,0,1},9191,3})),
     ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({"127.0.0.1",9191})),
     ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({{127,0,0,1},9191})),
+    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191,3})),
+    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191,65})),
     ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191})),
     ?_assertError (badarg, check_ip_port ({{655,0,0,1},9191})),
     ?_assertError (badarg, check_ip_port ({{127,0,0,1},91919}))
