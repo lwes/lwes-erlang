@@ -289,8 +289,16 @@ has_header_fields (B) when is_binary(B) ->
       false
   end.
 
-from_udp_packet ({ udp, _Socket, SenderIP, SenderPort, Packet }, Format) ->
-  ReceiptTime = millisecond_since_epoch (),
+from_udp_packet ({ udp, Socket, SenderIP, SenderPort, Packet }, Format) ->
+  % allow ReceiptTime to come in via the second element of the tuple in
+  % some cases, this was put in place to work with the journal listener
+  ReceiptTime =
+    case Socket of
+      S when is_port(S) ->
+        millisecond_since_epoch();
+      R when is_integer(R) ->
+        R
+    end,
   % only add header fields if they have not been added by upstream
   Extra =
     case has_header_fields (Packet) of

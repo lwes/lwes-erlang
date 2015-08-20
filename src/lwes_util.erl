@@ -36,6 +36,17 @@ ip2bin (Ip) when is_binary (Ip) ->
 ip2bin (Ip) ->
   list_to_binary (inet_parse:ntoa (Ip)).
 
+check_ip_port ({Ip, Port, TTL, Recbuf})
+    when ?is_ip_addr (Ip) andalso ?is_uint16 (Port)
+         andalso ?is_ttl (TTL) andalso is_integer(Recbuf) ->
+  {Ip, Port, TTL, Recbuf};
+check_ip_port ({Ip, Port, TTL, Recbuf})
+    when is_list (Ip) andalso ?is_uint16 (Port)
+         andalso ?is_ttl (TTL) andalso is_integer(Recbuf) ->
+  case inet_parse:address (Ip) of
+    {ok, {N1, N2, N3, N4}} -> {{N1, N2, N3, N4}, Port, TTL, Recbuf};
+    _ -> erlang:error(badarg)
+  end;
 check_ip_port ({Ip, Port, TTL})
     when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
   {Ip, Port, TTL};
@@ -143,6 +154,10 @@ normalize_ip_test_ () ->
 
 check_ip_port_test_ () ->
   [
+    ?_assertEqual ({{127,0,0,1},9191,3, 65535},
+                   check_ip_port ({{127,0,0,1},9191,3, 65535})),
+    ?_assertEqual ({{127,0,0,1},9191,3, 65535},
+                   check_ip_port ({"127.0.0.1",9191,3, 65535})),
     ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({"127.0.0.1",9191,3})),
     ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({{127,0,0,1},9191,3})),
     ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({"127.0.0.1",9191})),

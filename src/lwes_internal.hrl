@@ -31,6 +31,7 @@
                         port,
                         is_multicast,
                         ttl = 5,
+                        recbuf = 16777216,
                         type,
                         ref
                        }).
