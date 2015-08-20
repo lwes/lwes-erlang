@@ -88,14 +88,14 @@ handle_cast ( {process, {udp, _, {V1, V2, V3, V4}, P, B}},
   M = milliseconds_since_epoch (),
   I = 1,
   ok = file:write ( Journal,
-                    [ <<S:16/integer-signed-big,    % 2
+                    [ <<S:16/integer-unsigned-big,  % 2
                         M:64/integer-unsigned-big,  % 8
                         V4:8/integer-unsigned-big,  % 1
                         V3:8/integer-unsigned-big,  % 1
                         V2:8/integer-unsigned-big,  % 1
                         V1:8/integer-unsigned-big,  % 1
-                        P:16/integer-signed-big,    % 2
-                        I:16/integer-signed-big,    % 2
+                        P:16/integer-unsigned-big,  % 2
+                        I:16/integer-unsigned-big,  % 2
                         0:32/integer-signed-big     % 4
                       >>,
                       B
