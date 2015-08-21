@@ -5,6 +5,7 @@ Version 4.0.0 (molinaro)
   at the end of the event, don't add them (to keep proxied events honest).
   This breaks backward compatibility in case someone was relying on the
   previous behavior which was that fields showed up twice.
+  * start at a journal_listener
 
 Version 3.1.0 (molinaro)
   * set default TTL for multicast to 5, also allow it to be overridden
