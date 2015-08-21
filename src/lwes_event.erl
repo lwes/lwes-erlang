@@ -1213,6 +1213,9 @@ remove_attr (A, D) ->
 -include_lib ("eunit/include/eunit.hrl").
 
 test_packet (binary) ->
+  %% THIS IS A SERIALIZED PACKET
+  %% SENT FROM THE JAVA LIBRARY
+  %% THAT CONTAINS ALL TYPES
   %% captured from a java emitter at some point
   <<4,84,101,115,116,0,25,3,101,110,99,2,0,1,15,84,
     101,115,116,83,116,114,105,110,103,65,114,114,
@@ -2068,25 +2071,36 @@ serialize_test_ () ->
   ].
 
 deserialize_test_ () ->
-  %% THIS IS A SERIALIZED PACKET
-  %% SENT FROM THE JAVA LIBRARY
-  %% THAT CONTAINS ALL TYPES
-  JavaPacket = test_packet(raw),
-  [
-    % peek name check
-    ?_assertEqual (<<"Test">>, peek_name_from_udp (JavaPacket)),
-    % peek name failure
-    ?_assertEqual ({error, malformed_event},
-                   peek_name_from_udp ({udp, port,
-                                        {192,168,54,1}, 58206,
-                                        <<4,84,101,115>>}))
-    | [
-        ?_assertEqual (
-          remove_attr (<<"ReceiptTime">>, from_udp_packet(JavaPacket, Format)),
-          remove_attr (<<"ReceiptTime">>, test_packet (Format))
-        ) || Format <- formats() ]
-  ].
-
+  { setup,
+    fun () ->
+      {ok, Port} = gen_udp:open(0,[binary]),
+      {udp, Port, {192,168,54,1}, 58206, test_packet(binary)}
+    end,
+    fun ({udp, Port, _, _, _}) ->
+      gen_udp:close(Port)
+    end,
+    fun (Packet) ->
+      [
+        % peek name check
+        ?_assertEqual (<<"Test">>, peek_name_from_udp (Packet)),
+        % peek name failure
+        fun () ->
+          {ok, Port} = gen_udp:open(0,[binary]),
+          ?assertEqual ({error, malformed_event},
+                        peek_name_from_udp ({udp, Port,
+                                             {192,168,54,1}, 58206,
+                                             <<4,84,101,115>>})),
+          gen_udp:close(Port)
+        end
+        | [
+            ?_assertEqual (
+              remove_attr (<<"ReceiptTime">>, from_udp_packet(Packet, Format)),
+              remove_attr (<<"ReceiptTime">>, test_packet (Format))
+            ) || Format <- formats()
+          ]
+      ]
+    end
+  }.
 
 nested_json_test_ () ->
   [
@@ -2160,7 +2174,9 @@ check_headers_test_ () ->
                        ]},
       B1 = lwes_event:to_binary(E1),
       ?assertEqual (has_header_fields (B1), true),
-      E2 = lwes_event:from_udp_packet({udp,port,{127,0,0,1},24442,B1},tagged),
+      {ok, Port} = gen_udp:open (0, [binary]), % so the packets below work
+      E2 = lwes_event:from_udp_packet({udp,Port,{127,0,0,1},24442,B1},tagged),
+      gen_udp:close(Port),
       ?assertEqual (E1, E2)
     end
   ].
