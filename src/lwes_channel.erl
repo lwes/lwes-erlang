@@ -102,11 +102,14 @@ init ([ Channel = #lwes_channel {
                          { add_membership, {Ip, {0,0,0,0}}},
                          { recbuf, Recbuf },
                          binary
+                         | reuseport()
                        ]);
       {listener, false} ->
         gen_udp:open ( Port,
                        [ { recbuf, Recbuf },
+                         { reuseaddr, true },
                          binary
+                         | reuseport()
                        ]);
       {_, _} ->
         case IsMulticast of
@@ -219,6 +222,18 @@ is_multicast ({N1, _, _, _}) when N1 >= 224, N1 =< 239 ->
   true;
 is_multicast (_) ->
   false.
+
+reuseport() ->
+  case os:type() of
+    {unix, linux} ->
+      [ {raw, 1, 15, <<1:32/native>>} ];
+    {unix, OS} when OS =:= darwin;
+                    OS =:= freebsd;
+                    OS =:= openbsd;
+                    OS =:= netbsd ->
+      [ {raw, 16#ffff, 16#0200, <<1:32/native>>} ];
+    _ -> []
+  end.
 
 find_and_call (Channel, Msg) ->
   case lwes_channel_manager:find_channel (Channel) of
