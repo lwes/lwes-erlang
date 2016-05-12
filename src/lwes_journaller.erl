@@ -144,7 +144,7 @@ open (Root, Name, Ext) ->
 
 rename (Root, Name, Ext, LastRotate) ->
   {{Year,Month,Day},{Hour,Minute,Second}} =
-    calendar:now_to_universal_time(now()),
+    calendar:now_to_universal_time(os:timestamp()),
   NewFile =
     filename:join
       ([Root,
