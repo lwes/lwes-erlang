@@ -1,3 +1,6 @@
+Version 4.2.1 (twhalen)
+  * Fixed lwes:emit bug with lists of events
+
 Version 4.2.0 (molinaro)
   * attempt to use SO_REUSEPORT if available
   * remove use of erlang:now() from lwes_journaller
