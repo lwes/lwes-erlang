@@ -117,6 +117,16 @@ open (Type, Config) when Type =:= emitter; Type =:= listener ->
 open (_, _) ->
   { error, bad_type }.
 
+% emit an array of events
+emit (ChannelsIn, []) ->
+  ChannelsIn;
+
+emit (ChannelsIn, EventList)
+  when is_list (EventList) ->
+  [HeadEvent | TailEvents] = EventList,
+  ChannelsOut = emit (ChannelsIn, HeadEvent),
+  emit (ChannelsOut, TailEvents);
+
 % emit an event to one or more channels
 emit (Channel, Event) when is_record (Channel, lwes_channel) ->
   lwes_channel:send_to (Channel, lwes_event:to_binary (Event)),
