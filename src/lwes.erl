@@ -43,10 +43,12 @@
 -export ([ start/0,
            open/2,
            emit/2,
+           emit/3,
            listen/4,
            close/1,
            stats/0,
-           stats_raw/0 ]).
+           stats_raw/0,
+           enable_validation/1 ]).
 
 %%====================================================================
 %% API functions
@@ -135,6 +137,14 @@ emit (Channel, Event) when is_record (Channel, lwes_channel) ->
 emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
   lwes_multi_emitter:emit (Channels, lwes_event:to_binary (Event)).
 
+% emit an event to one or more channels
+emit (Channel, Event, SpecName) ->
+  case lwes_esf_validator:validate (SpecName, Event) of
+    ok -> emit (Channel, Event);
+    _  ->
+      error_logger:error_msg("validation failed for event '~s'",
+                             [Event#lwes_event.name])
+  end.
 %
 % listen for events
 %
@@ -209,6 +219,23 @@ stats_raw () ->
         <- lwes_channel_manager:stats () ]
   end.
 
+%
+% enable validation of the events sent via this LWES client
+% against the specification (ESF)
+%
+% ESFInfo  -  a list of tuples of the form { Name, FilePath }
+%
+%             Example : [{Name1, path1}, {Name2, path2}]
+%
+%             'Name' is used to match the 'event' with a particular
+%             ESF File
+
+%             'FilePath' is the path to the ESF File
+
+enable_validation (ESFInfo) ->
+    lists:foreach (
+     fun (ESF, File) -> lwes_esf_validator:add_esf (ESF, File) end,
+     ESFInfo).
 %%====================================================================
 %% Internal functions
 %%====================================================================

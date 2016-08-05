@@ -35,7 +35,14 @@ init([]) ->
           permanent,                               % always restart
           2000,                                    % time to wait for child stop
           supervisor,                              % type of child
-          [lwes_channel_sup]                       % modules used by child
+          [ lwes_channel_sup ]                     % modules used by child
+        },
+        { lwes_esf_validator,                      % child spec id
+          { lwes_esf_validator, start_link, [] },  % child function to call
+          permanent,                               % always restart
+          2000,                                    % time to wait for child stop
+          worker,                                  % type of child
+          [ lwes_esf_validator ]                   % modules used by child
         }
       ]
     }
