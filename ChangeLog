@@ -1,3 +1,6 @@
+Version 4.3.0 (molinaro)
+  * Support added for esf based validation
+
 Version 4.2.1 (twhalen)
   * Fixed lwes:emit bug with lists of events
 
