@@ -46,6 +46,7 @@
          from_binary/1,
          from_binary/2,
          peek_name_from_udp/1,
+         header_fields_to_iolist/3,
          has_header_fields/1,
          from_json/1,
          to_json/1,
@@ -232,10 +233,6 @@ set_ndouble_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
 set_ndouble_array(_,_,_) ->
   erlang:error(badarg).
 
-% allow for re-emission of events, by just returning a binary if given
-% a binary
-to_binary (Event) when is_binary (Event) ->
-  Event;
 to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   case Attrs of
     Dict when is_tuple (Attrs) andalso element (1, Attrs) =:= dict ->
@@ -248,13 +245,24 @@ to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
           write_attrs (A, [])
         ]
       )
-  end.
+  end;
+% allow for re-emission of events, if it doesn't match the record, it
+% could be a binary or an iolist, so just forward it through
+to_binary (Event) ->
+  Event.
 
 peek_name_from_udp ({ udp, _, _, _, Packet }) ->
   case read_name (Packet) of
     { ok, EventName, _ } -> EventName;
     E -> E
   end.
+
+header_fields_to_iolist (ReceiptTime, SenderIP, SenderPort) ->
+  % these need to be in reverse order as we don't bother reversing the io_list
+  write_attrs (
+    [ {?LWES_U_INT_16, <<"SenderPort">>, SenderPort},
+      {?LWES_IP_ADDR, <<"SenderIP">>, SenderIP},
+      {?LWES_INT_64, <<"ReceiptTime">>, ReceiptTime} ], []).
 
 has_header_fields (B) when is_binary(B) ->
   Size = erlang:byte_size (B),
@@ -1858,114 +1866,114 @@ new_test_ () ->
     % INT16 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_16,cat,0}]},
-                   lwes_event:set_int16 (lwes_event:new(foo),cat,0)),
+                   set_int16 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_16,cat,-5}]},
-                   lwes_event:set_int16 (lwes_event:new(foo),cat,-5)),
+                   set_int16 (new(foo),cat,-5)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_16,cat,50}]},
-                   lwes_event:set_int16 (lwes_event:new(foo),cat,50)),
+                   set_int16 (new(foo),cat,50)),
     % INT16 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_int16 (lwes_event:new(foo),cat,32768)),
+                   set_int16 (new(foo),cat,32768)),
     ?_assertError (badarg,
-                   lwes_event:set_int16 (lwes_event:new(foo),cat,-32769)),
+                   set_int16 (new(foo),cat,-32769)),
     % UINT16 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_16,cat,0}]},
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,0)),
+                   set_uint16 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_16,cat,5}]},
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,5)),
+                   set_uint16 (new(foo),cat,5)),
     % UINT16 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,-5)),
+                   set_uint16 (new(foo),cat,-5)),
     ?_assertError (badarg,
-                   lwes_event:set_uint16 (lwes_event:new(foo),cat,65536)),
+                   set_uint16 (new(foo),cat,65536)),
     % INT32 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_32,cat,0}]},
-                   lwes_event:set_int32 (lwes_event:new(foo),cat,0)),
+                   set_int32 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_32,cat,-5}]},
-                   lwes_event:set_int32 (lwes_event:new(foo),cat,-5)),
+                   set_int32 (new(foo),cat,-5)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_32,cat,50}]},
-                   lwes_event:set_int32 (lwes_event:new(foo),cat,50)),
+                   set_int32 (new(foo),cat,50)),
     % INT32 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_int32 (lwes_event:new(foo),cat,2147483648)),
+                   set_int32 (new(foo),cat,2147483648)),
     ?_assertError (badarg,
-                   lwes_event:set_int32 (lwes_event:new(foo),cat,-2147483649)),
+                   set_int32 (new(foo),cat,-2147483649)),
     % UINT32 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_32,cat,0}]},
-                   lwes_event:set_uint32 (lwes_event:new(foo),cat,0)),
+                   set_uint32 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_32,cat,50}]},
-                   lwes_event:set_uint32 (lwes_event:new(foo),cat,50)),
+                   set_uint32 (new(foo),cat,50)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_32,cat,4294967295}]},
-                   lwes_event:set_uint32 (lwes_event:new(foo),cat,4294967295)),
+                   set_uint32 (new(foo),cat,4294967295)),
     % UINT32 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_uint32 (lwes_event:new(foo),cat,-5)),
+                   set_uint32 (new(foo),cat,-5)),
     ?_assertError (badarg,
-                   lwes_event:set_uint32 (lwes_event:new(foo),cat,4294967296)),
+                   set_uint32 (new(foo),cat,4294967296)),
     % INT64 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_64,cat,0}]},
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,0)),
+                   set_int64 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_64,cat,-5}]},
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,-5)),
+                   set_int64 (new(foo),cat,-5)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_64,cat,-9223372036854775808}]},
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,-9223372036854775808)),
+                   set_int64 (new(foo),cat,-9223372036854775808)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_64,cat,9223372036854775807}]},
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,9223372036854775807)),
+                   set_int64 (new(foo),cat,9223372036854775807)),
     % INT64 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,9223372036854775808)),
+                   set_int64 (new(foo),cat,9223372036854775808)),
     ?_assertError (badarg,
-                   lwes_event:set_int64 (lwes_event:new(foo),cat,-9223372036854775809)),
+                   set_int64 (new(foo),cat,-9223372036854775809)),
     % UINT64 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_64,cat,0}]},
-                   lwes_event:set_uint64 (lwes_event:new(foo),cat,0)),
+                   set_uint64 (new(foo),cat,0)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_64,cat,50}]},
-                   lwes_event:set_uint64 (lwes_event:new(foo),cat,50)),
+                   set_uint64 (new(foo),cat,50)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_64,cat,18446744073709551615}]},
-                   lwes_event:set_uint64 (lwes_event:new(foo),cat,18446744073709551615)),
+                   set_uint64 (new(foo),cat,18446744073709551615)),
     % UINT64 bounds tests
     ?_assertError (badarg,
-                   lwes_event:set_uint64 (lwes_event:new(foo),cat,-5)),
+                   set_uint64 (new(foo),cat,-5)),
     ?_assertError (badarg,
-                   lwes_event:set_uint64 (lwes_event:new(foo),cat,18446744073709551616)),
+                   set_uint64 (new(foo),cat,18446744073709551616)),
     % BOOLEAN tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_BOOLEAN,cat,true}]},
-                   lwes_event:set_boolean (lwes_event:new(foo),cat,true)),
+                   set_boolean (new(foo),cat,true)),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_BOOLEAN,cat,false}]},
-                   lwes_event:set_boolean (lwes_event:new(foo),cat,false)),
+                   set_boolean (new(foo),cat,false)),
     ?_assertError (badarg,
-                   lwes_event:set_boolean (lwes_event:new(foo),cat,kinda)),
+                   set_boolean (new(foo),cat,kinda)),
     % IP_ADDR test
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
-                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,{127,0,0,1})),
+                   set_ip_addr (new(foo),cat,{127,0,0,1})),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
-                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,"127.0.0.1")),
+                   set_ip_addr (new(foo),cat,"127.0.0.1")),
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
-                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,<<"127.0.0.1">>)),
+                   set_ip_addr (new(foo),cat,<<"127.0.0.1">>)),
     ?_assertError (badarg,
-                   lwes_event:set_ip_addr (lwes_event:new(foo),cat,"300.300.300.300"))
+                   set_ip_addr (new(foo),cat,"300.300.300.300"))
   ].
 
 long_string_test () ->
@@ -2016,7 +2024,7 @@ set_nullable_array_test_ () ->
     ?_assertEqual (#lwes_event {name = "foo",
                                 attrs = [ { ?LWES_N_INT_16_ARRAY, key1,
                                             [1, -1, undefined, 3, undefined, -4]}]},
-                    lwes_event:set_nint16_array(lwes_event:new(foo),
+                    set_nint16_array(new(foo),
                       key1, [1, -1, undefined, 3, undefined, -4])
                     )
   ].
@@ -2055,18 +2063,18 @@ string_nullable_arrays_test_ () ->
 
 serialize_test_ () ->
   [
-    ?_assertEqual (to_binary(
+    ?_assertEqual (test_packet(binary),
+                   to_binary(
                      remove_attr(<<"ReceiptTime">>,
                        remove_attr(<<"SenderIP">>,
                          remove_attr(<<"SenderPort">>,
-                                     test_packet(tagged))))),
-                   test_packet(binary)),
+                                     test_packet(tagged)))))
+                   ),
     fun () ->
       E = #lwes_event { name = <<"test">>,
                         attrs = dict:from_list([{<<"a">>,<<"b">>},{<<"c">>,1}])
                       },
-      ?assertEqual (lwes_event:from_binary (lwes_event:to_binary(E),dict),
-                    E)
+      ?assertEqual (E, from_binary (to_binary(E),dict))
     end
   ].
 
@@ -2162,8 +2170,8 @@ check_headers_test_ () ->
       115,3,110,117,109,1,0,2,7,112,114,111,103,95,105,100,5,0,4,
       114,105,97,107>>,
   [
-    ?_assertEqual (has_header_fields (PacketWithHeaders), true),
-    ?_assertEqual (has_header_fields (PacketWithoutHeaders), false),
+    ?_assertEqual (true, has_header_fields (PacketWithHeaders)),
+    ?_assertEqual (false, has_header_fields (PacketWithoutHeaders)),
     fun () ->
       E1 = #lwes_event{name = <<"test">>,
                        attrs = [
@@ -2172,12 +2180,33 @@ check_headers_test_ () ->
                           {int64,<<"ReceiptTime">>,1439587738948},
                           {string,<<"foo">>,<<"bar">>}
                        ]},
-      B1 = lwes_event:to_binary(E1),
-      ?assertEqual (has_header_fields (B1), true),
+      B1 = to_binary(E1),
+      ?assertEqual (true, has_header_fields (B1)),
       {ok, Port} = gen_udp:open (0, [binary]), % so the packets below work
-      E2 = lwes_event:from_udp_packet({udp,Port,{127,0,0,1},24442,B1},tagged),
+      E2 = from_udp_packet({udp,Port,{127,0,0,1},24442,B1},tagged),
       gen_udp:close(Port),
       ?assertEqual (E1, E2)
+    end,
+    fun () ->
+      H = header_fields_to_iolist(12345253,{127,0,0,1},20202),
+      ?assertEqual(true,
+                   has_header_fields(erlang:iolist_to_binary(H))),
+      EventNoHeaders =
+        #lwes_event { name = <<"foo">>,
+                      attrs = [{string, <<"bar">>,<<"baz">>}]},
+      ExpectedEvent =
+        #lwes_event { name = <<"foo">>,
+                      attrs = [{uint16,<<"SenderPort">>,20202},
+                               {ip_addr,<<"SenderIP">>,{127,0,0,1}},
+                               {int64,<<"ReceiptTime">>,12345253},
+                               {string,<<"bar">>,<<"baz">>}] },
+      ?assertEqual (ExpectedEvent,
+                    from_binary (
+                      erlang:iolist_to_binary (
+                        [ to_binary (EventNoHeaders), H ]
+                      ),
+                      tagged
+                    ))
     end
   ].
 

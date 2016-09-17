@@ -3,5 +3,5 @@ doc
 ebin
 .eunit
 .rebar
-src/esf_lexer.erl
-src/esf_parser.erl
+src/lwes_esf_lexer.erl
+src/lwes_esf_parser.erl
