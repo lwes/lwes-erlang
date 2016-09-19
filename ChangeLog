@@ -1,3 +1,8 @@
+Version 4.4.0 (molinaro)
+  * change to allow emitting of iolists
+  * function added to allow easy appending of headers to event
+  * fixes for validation
+
 Version 4.3.0 (molinaro)
   * Support added for esf based validation
 
