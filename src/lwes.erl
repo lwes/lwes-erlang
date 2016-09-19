@@ -123,9 +123,7 @@ open (_, _) ->
 emit (ChannelsIn, []) ->
   ChannelsIn;
 
-emit (ChannelsIn, EventList)
-  when is_list (EventList) ->
-  [HeadEvent | TailEvents] = EventList,
+emit (ChannelsIn, [ HeadEvent = #lwes_event{} | TailEvents]) ->
   ChannelsOut = emit (ChannelsIn, HeadEvent),
   emit (ChannelsOut, TailEvents);
 
@@ -140,10 +138,12 @@ emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
 % emit an event to one or more channels
 emit (Channel, Event, SpecName) ->
   case lwes_esf_validator:validate (SpecName, Event) of
-    ok -> emit (Channel, Event);
+    true ->
+      emit (Channel, Event);
     _  ->
       error_logger:error_msg("validation failed for event '~s'",
-                             [Event#lwes_event.name])
+                             [Event#lwes_event.name]),
+      Channel
   end.
 %
 % listen for events
@@ -231,11 +231,11 @@ stats_raw () ->
 %             ESF File
 
 %             'FilePath' is the path to the ESF File
-
 enable_validation (ESFInfo) ->
-    lists:foreach (
-     fun (ESF, File) -> lwes_esf_validator:add_esf (ESF, File) end,
+  lists:foreach (
+     fun ({ESF, File}) -> lwes_esf_validator:add_esf (ESF, File) end,
      ESFInfo).
+
 %%====================================================================
 %% Internal functions
 %%====================================================================

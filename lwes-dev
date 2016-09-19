@@ -8,5 +8,4 @@ exec erl \
   -name lwes -setcookie lwes \
   $deps \
   -pa ebin \
-  -s reloader \
   -s lwes_app

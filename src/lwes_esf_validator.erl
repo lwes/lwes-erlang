@@ -18,10 +18,10 @@
 
 -include_lib ("lwes.hrl").
 
--define (SPEC_TAB, esf_specs).
+-define (SPEC_TAB, lwes_esf_specs).
 
--define(LEXER, esf_lexer).
--define(PARSER, esf_parser).
+-define(LEXER, lwes_esf_lexer).
+-define(PARSER, lwes_esf_parser).
 
 -define(META_EVENT, "MetaEventInfo").
 -define(STATS_KEY, stats).
