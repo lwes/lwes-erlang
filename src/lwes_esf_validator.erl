@@ -34,7 +34,9 @@ start_link () ->
 
 add_esf (ESFName, ESFFile) ->
   Events = parse (file, ESFFile),
+  add_esf_events(ESFName, Events).
 
+add_esf_events(ESFName, Events) ->
   % if 'MetaEventInfo' is defined we need to merge the attribute
   %specification from the 'Meta Event' to the specification of
   % all other 'real' events
@@ -108,14 +110,29 @@ add_event (ESFName, Event) ->
              {{ ESFName, EventName }, { RequiredAttrs, OptionalAttrs }}).
 
 validate_event (EventName, { RequiredSpec, OptionalSpec }, EventAttrs) ->
-  case validate_required (EventName, RequiredSpec, EventAttrs) of
-    {ok, OptionalAttrs} ->
-           case validate_optional (EventName, OptionalSpec, OptionalAttrs) of
-             true -> ets:update_counter (?SPEC_TAB, ?STATS_KEY, {3,1}),
-                     true;
-             _ -> false
-           end;
-    _ -> false
+  case validate_unique (EventName, EventAttrs, []) of 
+    false -> false;
+    true ->
+      case validate_required (EventName, RequiredSpec, EventAttrs) of
+        {ok, OptionalAttrs} ->
+               case validate_optional (EventName, OptionalSpec, OptionalAttrs) of
+                 true -> ets:update_counter (?SPEC_TAB, ?STATS_KEY, {3,1}),
+                         true;
+                 _ -> false
+               end;
+        _ -> false
+      end
+  end.
+
+
+validate_unique (_, [], _) -> true;
+validate_unique (EventName, [{_, AttrName, _} | T], AttrsFound) -> 
+  case lists:keyfind (AttrName, 1, AttrsFound) of
+    false -> validate_unique(EventName, T, [{AttrName} | AttrsFound]);
+    _ -> 
+       error_logger:warning_msg("'duplicate' field ~s in event ~p",
+             [AttrName, EventName]),
+       false
   end.
 
 validate_required (_, [], EventAttrs) -> {ok, EventAttrs};
@@ -140,7 +157,10 @@ validate_optional (_, _OptionalSpec, []) -> true;
 
 validate_optional (EventName, OptionalSpec, [{_Type, AttrName, _} = H | T]) ->
     case lists:keyfind (AttrName, 2, OptionalSpec) of
-       false -> false;
+       false -> 
+         error_logger:warning_msg("'unexpected' field ~s was found in event ~p",
+               [AttrName, EventName]),
+         false;
        Spec ->
          case validate_attribute (EventName, Spec, H) of
            true -> validate_optional (EventName, OptionalSpec, T);
@@ -180,16 +200,78 @@ loop (InFile, Acc) ->
 %%% Test functions
 %%--------------------------------------------------------------------
 
--ifdef(HAVE_EUNIT).
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
--ifdef(EUNIT).
 
-parse (String) ->
+parse_string (String) ->
     {ok, Tokens, _EndLine} = ?LEXER:string (String),
     {ok, ParseTree} = ?PARSER:parse ( Tokens ),
     ParseTree.
+
+validate_test_() ->
+  EventDefs = parse_string(
+     "TestEvent {
+        required int32 i = 1;
+        required boolean j;
+        int32 k = 1;
+        string l;
+      }"
+  ),
+  Validate = fun (Attrs) ->
+    ets:new (?SPEC_TAB, [set, public, named_table, {keypos, 1}]),
+    ets:insert (?SPEC_TAB,{?STATS_KEY, 0, 0}),
+    add_esf_events(test_esf, EventDefs),
+    Valid = validate(test_esf, #lwes_event {name = <<"TestEvent">>, attrs = Attrs}),
+    ets:delete (?SPEC_TAB),
+    Valid
+  end,
+  [
+    ?_assertEqual(true, % all fields
+      Validate([{int32,<<"i">>,314159},
+       {boolean,<<"j">>,false},
+       {int32,<<"k">>,654321},
+       {string,<<"l">>,<<"foo">>}])
+    ),
+    % NOTE: Default values aren't patched in anywhere currently.
+    %   So, let this fail validation for now.
+    %?assertEqual(true, % missing required field with default
+    %  Validate([ {boolean,<<"j">>,false},
+    %   {int32,<<"k">>,654321},
+    %   {string,<<"l">>,<<"foo">>}])
+    %),
+    ?_assertEqual(false, % missing required field (no default)
+      Validate([{int32,<<"i">>,314159},
+       {int32,<<"k">>,654321},
+       {string,<<"l">>,<<"foo">>}])
+    ),
+    ?_assertEqual(false, % duplicate field
+      Validate([{int32,<<"i">>,314159},
+       {boolean,<<"j">>,false},
+       {boolean,<<"j">>,false},
+       {int32,<<"k">>,654321},
+       {string,<<"l">>,<<"foo">>}])
+    ),
+    ?_assertEqual(false, % type error, required field
+      Validate([{boolean,<<"i">>,true},
+       {boolean,<<"j">>,false},
+       {int32,<<"k">>,654321},
+       {string,<<"l">>,<<"foo">>}])
+    ),
+    ?_assertEqual(false, % type error, optional field
+      Validate([{int32,<<"i">>,314159},
+       {boolean,<<"j">>,false},
+       {string,<<"k">>,<<"blah">>},
+       {string,<<"l">>,<<"foo">>}])
+    ),
+    ?_assertEqual(false, % extra undefined field
+      Validate([{int32,<<"i">>,314159},
+       {boolean,<<"j">>,false},
+       {int32,<<"k">>,654321},
+       {int32,<<"extra">>,12345},
+       {string,<<"l">>,<<"foo">>}])
+    )
+  ].
 
 parse_test_() ->
   TestCases = [
@@ -367,6 +449,6 @@ parse_test_() ->
                  "
                 }
               ],
-  [ ?_assertEqual (E, parse(TC)) || {E, TC} <- TestCases ].
+  [ ?_assertEqual (E, parse_string(TC)) || {E, TC} <- TestCases ].
 
 -endif.

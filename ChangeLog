@@ -1,3 +1,9 @@
+Version 4.4.1 (timrc)
+  * Minor validator patches
+    * Log message for extra, unexpected fields.
+    * Check for duplicate fields.
+    * Add unit tests.
+
 Version 4.4.0 (molinaro)
   * change to allow emitting of iolists
   * function added to allow easy appending of headers to event
