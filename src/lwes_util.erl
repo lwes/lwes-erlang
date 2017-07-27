@@ -9,6 +9,7 @@
           check_ip_port/1,
           ceiling/1,
           count_ones/1,
+          any_to_list/1,
           any_to_binary/1,
           arr_to_binary/1,
           arr_to_binary/2,
@@ -36,6 +37,14 @@ ip2bin (Ip) when is_binary (Ip) ->
 ip2bin (Ip) ->
   list_to_binary (inet_parse:ntoa (Ip)).
 
+check_ip_port ({Ip, Port, Options}) when is_list(Options) ->
+  case { proplists:get_value (ttl, Options),
+         proplists:get_value (recbuf, Options) } of
+    { undefined, undefined } -> check_ip_port ({Ip, Port});
+    { TTL,       undefined } -> check_ip_port ({Ip, Port, TTL});
+    { undefined, RecBuf    } -> check_ip_port ({Ip, Port, 5, RecBuf });
+    { TTL,       RecBuf    } -> check_ip_port ({Ip, Port, TTL, RecBuf })
+  end;
 check_ip_port ({Ip, Port, TTL, Recbuf})
     when ?is_ip_addr (Ip) andalso ?is_uint16 (Port)
          andalso ?is_ttl (TTL) andalso is_integer(Recbuf) ->
@@ -80,6 +89,17 @@ count_ones(Bin) -> count_ones(Bin, 0).
 count_ones(<<>>, Counter) -> Counter;
 count_ones(<<X:1, Rest/bitstring>>, Counter) ->
   count_ones(Rest, Counter + X).
+
+any_to_list (B) when is_binary (B) ->
+  binary_to_list (B);
+any_to_list (L) when is_list (L) ->
+  L;
+any_to_list (I) when is_integer (I) ->
+  integer_to_list (I);
+any_to_list (F) when is_float (F) ->
+  float_to_list (F);
+any_to_list (A) when is_atom (A) ->
+  atom_to_list (A).
 
 arr_to_binary (L, ipaddr) ->
   [ip2bin(E) || E <- L ].
