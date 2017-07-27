@@ -138,7 +138,7 @@ emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
 % emit an event to one or more channels
 emit (Channel, Event, SpecName) ->
   case lwes_esf_validator:validate (SpecName, Event) of
-    true ->
+    ok ->
       emit (Channel, Event);
     _  ->
       error_logger:error_msg("validation failed for event '~s'",

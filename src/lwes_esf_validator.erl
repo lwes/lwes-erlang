@@ -52,7 +52,7 @@ add_esf_events(ESFName, Events) ->
 validate (ESFName, #lwes_event {name = EventName, attrs = Attrs} = _Event) ->
   ets:update_counter (?SPEC_TAB, ?STATS_KEY, {2,1}),
 
-  EventName1 = binary_to_list (EventName),
+  EventName1 = lwes_util:any_to_list (EventName),
   Key = { ESFName, EventName1 },
 
   case ets:lookup (?SPEC_TAB, Key) of
@@ -111,28 +111,28 @@ add_event (ESFName, Event) ->
 
 validate_event (EventName, { RequiredSpec, OptionalSpec }, EventAttrs) ->
   case validate_unique (EventName, EventAttrs, []) of 
-    false -> false;
-    true ->
+    ok ->
       case validate_required (EventName, RequiredSpec, EventAttrs) of
         {ok, OptionalAttrs} ->
                case validate_optional (EventName, OptionalSpec, OptionalAttrs) of
-                 true -> ets:update_counter (?SPEC_TAB, ?STATS_KEY, {3,1}),
-                         true;
-                 _ -> false
+                 ok -> ets:update_counter (?SPEC_TAB, ?STATS_KEY, {3,1}),
+                         ok;
+                 ErrorOpt -> ErrorOpt
                end;
-        _ -> false
-      end
+        ErrorReq -> ErrorReq
+      end;
+    ErrorUnique -> ErrorUnique
   end.
 
 
-validate_unique (_, [], _) -> true;
+validate_unique (_, [], _) -> ok;
 validate_unique (EventName, [{_, AttrName, _} | T], AttrsFound) -> 
   case lists:keyfind (AttrName, 1, AttrsFound) of
     false -> validate_unique(EventName, T, [{AttrName} | AttrsFound]);
     _ -> 
        error_logger:warning_msg("'duplicate' field ~s in event ~p",
              [AttrName, EventName]),
-       false
+       {field_duplicate, AttrName, EventName}
   end.
 
 validate_required (_, [], EventAttrs) -> {ok, EventAttrs};
@@ -143,28 +143,28 @@ validate_required (EventName, [{_Type_S,
      false ->
        error_logger:warning_msg("'required' field ~s is missing from event ~p",
              [AttributeName_S, EventName]),
-           false;
+       {field_missing, AttributeName_S, EventName};
      Attr ->
        case validate_attribute (EventName, H, Attr) of
-         true ->
+         ok ->
            EventAttrs1 = lists:delete (Attr, EventAttrs),
            validate_required (EventName, T, EventAttrs1);
-         false -> false
+         Error -> Error
         end
   end.
 
-validate_optional (_, _OptionalSpec, []) -> true;
+validate_optional (_, _OptionalSpec, []) -> ok;
 
 validate_optional (EventName, OptionalSpec, [{_Type, AttrName, _} = H | T]) ->
     case lists:keyfind (AttrName, 2, OptionalSpec) of
        false -> 
          error_logger:warning_msg("'unexpected' field ~s was found in event ~p",
                [AttrName, EventName]),
-         false;
+         {field_undefined, AttrName, EventName};
        Spec ->
          case validate_attribute (EventName, Spec, H) of
-           true -> validate_optional (EventName, OptionalSpec, T);
-           _ -> false
+           ok -> validate_optional (EventName, OptionalSpec, T);
+           Error -> Error
           end
     end.
 
@@ -174,8 +174,8 @@ validate_attribute (EventName, {Type_S, AttrName_S, _, _}, {Type, AttrName, _}) 
            error_logger:warning_msg(
               "field ~p has wrong type ~p in event ~p! Expected type : ~p",
               [binary_to_list(AttrName_S), Type, EventName, Type_S]),
-           false;
-        _ -> true
+           {field_type_mismatch, AttrName, EventName, Type, Type_S};
+        _ -> ok
     end.
 
 parse (file, FileName) ->
@@ -219,6 +219,9 @@ validate_test_() ->
       }"
   ),
   Validate = fun (Attrs) ->
+    try
+      ets:delete (?SPEC_TAB)
+    catch _:_ -> 0 end, 
     ets:new (?SPEC_TAB, [set, public, named_table, {keypos, 1}]),
     ets:insert (?SPEC_TAB,{?STATS_KEY, 0, 0}),
     add_esf_events(test_esf, EventDefs),
@@ -227,7 +230,7 @@ validate_test_() ->
     Valid
   end,
   [
-    ?_assertEqual(true, % all fields
+    ?_assertEqual(ok, % all fields
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
        {int32,<<"k">>,654321},
@@ -240,31 +243,36 @@ validate_test_() ->
     %   {int32,<<"k">>,654321},
     %   {string,<<"l">>,<<"foo">>}])
     %),
-    ?_assertEqual(false, % missing required field (no default)
+    ?_assertEqual({field_missing, <<"j">>, "TestEvent"}, 
+      % missing required field (no default)
       Validate([{int32,<<"i">>,314159},
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual(false, % duplicate field
+    ?_assertEqual({field_duplicate, <<"j">>, "TestEvent"}, 
+      % duplicate field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
        {boolean,<<"j">>,false},
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual(false, % type error, required field
+    ?_assertEqual({field_type_mismatch, <<"i">>, "TestEvent", boolean, int32},
+      % type error, required field
       Validate([{boolean,<<"i">>,true},
        {boolean,<<"j">>,false},
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual(false, % type error, optional field
+    ?_assertEqual({field_type_mismatch, <<"k">>, "TestEvent", string, int32},
+      % type error, optional field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
        {string,<<"k">>,<<"blah">>},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual(false, % extra undefined field
+    ?_assertEqual({field_undefined, <<"extra">>, "TestEvent"},
+      % extra undefined field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
        {int32,<<"k">>,654321},
