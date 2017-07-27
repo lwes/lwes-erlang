@@ -42,6 +42,7 @@
          set_nfloat_array/3,
          set_ndouble_array/3,
          to_binary/1,
+         to_iolist/1,
          from_udp_packet/2,
          from_binary/1,
          from_binary/2,
@@ -233,11 +234,18 @@ set_ndouble_array(E = #lwes_event { attrs = A}, K, V) when is_list (V) ->
 set_ndouble_array(_,_,_) ->
   erlang:error(badarg).
 
-to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
+to_binary (Event = #lwes_event { }) ->
+  iolist_to_binary (to_iolist (Event));
+% allow for re-emission of events, if it doesn't match the record, it
+% could be a binary or an iolist, so just forward it through
+to_binary (Event) ->
+  Event.
+
+to_iolist (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   case Attrs of
     Dict when is_tuple (Attrs) andalso element (1, Attrs) =:= dict ->
-      to_binary (Event#lwes_event { attrs = dict:to_list (Dict) });
-    A  ->
+      to_iolist (Event#lwes_event { attrs = dict:to_list (Dict) });
+    A ->
       NumAttrs = length (A),
       iolist_to_binary (
         [ write_name (EventName),
@@ -246,9 +254,8 @@ to_binary (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
         ]
       )
   end;
-% allow for re-emission of events, if it doesn't match the record, it
-% could be a binary or an iolist, so just forward it through
-to_binary (Event) ->
+to_iolist (Event) ->
+  % assume if we get anything else it's either a binary or an iolist
   Event.
 
 peek_name_from_udp ({ udp, _, _, _, Packet }) ->
