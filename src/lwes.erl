@@ -140,9 +140,8 @@ emit (Channel, Event, SpecName) ->
   case lwes_esf_validator:validate (SpecName, Event) of
     ok ->
       emit (Channel, Event);
-    _  ->
-      error_logger:error_msg("validation failed for event '~s'",
-                             [Event#lwes_event.name]),
+    {error, Error}  ->
+      error_logger:error_msg("Event validation error ~p", [Error]),
       Channel
   end.
 %

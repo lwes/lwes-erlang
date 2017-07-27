@@ -58,9 +58,7 @@ validate (ESFName, #lwes_event {name = EventName, attrs = Attrs} = _Event) ->
   case ets:lookup (?SPEC_TAB, Key) of
     [{_, EventSpec}] ->
         validate_event (EventName1, EventSpec, Attrs);
-    _ -> error_logger:warning_msg ("event ~p is not defined in ESF!",
-                                   [EventName1]),
-         false
+    _ -> {error, {event_undefined, EventName}}
   end.
 
 stats () ->
@@ -130,9 +128,7 @@ validate_unique (EventName, [{_, AttrName, _} | T], AttrsFound) ->
   case lists:keyfind (AttrName, 1, AttrsFound) of
     false -> validate_unique(EventName, T, [{AttrName} | AttrsFound]);
     _ -> 
-       error_logger:warning_msg("'duplicate' field ~s in event ~p",
-             [AttrName, EventName]),
-       {field_duplicate, AttrName, EventName}
+       {error, {field_duplicate, AttrName, EventName}}
   end.
 
 validate_required (_, [], EventAttrs) -> {ok, EventAttrs};
@@ -141,9 +137,7 @@ validate_required (EventName, [{_Type_S,
                    AttributeName_S, _, _} = H| T], EventAttrs) ->
   case lists:keyfind (AttributeName_S, 2, EventAttrs) of
      false ->
-       error_logger:warning_msg("'required' field ~s is missing from event ~p",
-             [AttributeName_S, EventName]),
-       {field_missing, AttributeName_S, EventName};
+       {error, {field_missing, AttributeName_S, EventName}};
      Attr ->
        case validate_attribute (EventName, H, Attr) of
          ok ->
@@ -158,9 +152,7 @@ validate_optional (_, _OptionalSpec, []) -> ok;
 validate_optional (EventName, OptionalSpec, [{_Type, AttrName, _} = H | T]) ->
     case lists:keyfind (AttrName, 2, OptionalSpec) of
        false -> 
-         error_logger:warning_msg("'unexpected' field ~s was found in event ~p",
-               [AttrName, EventName]),
-         {field_undefined, AttrName, EventName};
+         {error, {field_undefined, AttrName, EventName}};
        Spec ->
          case validate_attribute (EventName, Spec, H) of
            ok -> validate_optional (EventName, OptionalSpec, T);
@@ -171,10 +163,7 @@ validate_optional (EventName, OptionalSpec, [{_Type, AttrName, _} = H | T]) ->
 validate_attribute (EventName, {Type_S, AttrName_S, _, _}, {Type, AttrName, _}) ->
     case AttrName_S == AttrName andalso Type_S == Type of
         false ->
-           error_logger:warning_msg(
-              "field ~p has wrong type ~p in event ~p! Expected type : ~p",
-              [binary_to_list(AttrName_S), Type, EventName, Type_S]),
-           {field_type_mismatch, AttrName, EventName, Type, Type_S};
+           {error, {field_type_mismatch, AttrName, EventName, Type, Type_S}};
         _ -> ok
     end.
 
@@ -243,13 +232,13 @@ validate_test_() ->
     %   {int32,<<"k">>,654321},
     %   {string,<<"l">>,<<"foo">>}])
     %),
-    ?_assertEqual({field_missing, <<"j">>, "TestEvent"}, 
+    ?_assertEqual({error, {field_missing, <<"j">>, "TestEvent"}}, 
       % missing required field (no default)
       Validate([{int32,<<"i">>,314159},
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual({field_duplicate, <<"j">>, "TestEvent"}, 
+    ?_assertEqual({error, {field_duplicate, <<"j">>, "TestEvent"}}, 
       % duplicate field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
@@ -257,21 +246,21 @@ validate_test_() ->
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual({field_type_mismatch, <<"i">>, "TestEvent", boolean, int32},
+    ?_assertEqual({error, {field_type_mismatch, <<"i">>, "TestEvent", boolean, int32}},
       % type error, required field
       Validate([{boolean,<<"i">>,true},
        {boolean,<<"j">>,false},
        {int32,<<"k">>,654321},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual({field_type_mismatch, <<"k">>, "TestEvent", string, int32},
+    ?_assertEqual({error, {field_type_mismatch, <<"k">>, "TestEvent", string, int32}},
       % type error, optional field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
        {string,<<"k">>,<<"blah">>},
        {string,<<"l">>,<<"foo">>}])
     ),
-    ?_assertEqual({field_undefined, <<"extra">>, "TestEvent"},
+    ?_assertEqual({error, {field_undefined, <<"extra">>, "TestEvent"}},
       % extra undefined field
       Validate([{int32,<<"i">>,314159},
        {boolean,<<"j">>,false},
