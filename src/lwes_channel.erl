@@ -7,11 +7,11 @@
 
 %% API
 -export ([ start_link/1,
-           open/2,
+           new/2,
+           open/1,
            register_callback/4,
            send_to/2,
-           close/1,
-           stats/1
+           close/1
          ]).
 
 %% gen_server callbacks
@@ -23,7 +23,7 @@
            code_change/3
          ]).
 
--record (state, {socket, channel, type, callback, sent = 0, received = 0}).
+-record (state, {socket, channel, type, callback}).
 -record (callback, {function, format, state}).
 
 %%====================================================================
@@ -32,37 +32,14 @@
 start_link (Channel) ->
   gen_server:start_link (?MODULE, [Channel], []).
 
-open (Type, {Ip, Port, TTL, Recbuf}) ->
-  Channel = #lwes_channel {
-              ip = Ip,
-              port = Port,
-              is_multicast = is_multicast (Ip),
-              ttl = TTL,
-              recbuf = Recbuf,
-              type = Type,
-              ref = make_ref ()
-            },
-  { ok, _Pid } = lwes_channel_manager:open_channel (Channel),
-  { ok, Channel};
-open (Type, {Ip, Port, TTL}) ->
-  Channel = #lwes_channel {
-              ip = Ip,
-              port = Port,
-              is_multicast = is_multicast (Ip),
-              ttl = TTL,
-              type = Type,
-              ref = make_ref ()
-            },
-  { ok, _Pid } = lwes_channel_manager:open_channel (Channel),
-  { ok, Channel};
-open (Type, {Ip, Port}) ->
-  Channel = #lwes_channel {
-              ip = Ip,
-              port = Port,
-              is_multicast = is_multicast (Ip),
-              type = Type,
-              ref = make_ref ()
-            },
+new (Type, Config) ->
+  #lwes_channel {
+     type = Type,
+     config = lwes_net_udp:new (Type, Config),
+     ref = make_ref()
+  }.
+
+open (Channel) ->
   { ok, _Pid } = lwes_channel_manager:open_channel (Channel),
   { ok, Channel}.
 
@@ -76,56 +53,12 @@ send_to (Channel, Msg) ->
 close (Channel) ->
   find_and_cast (Channel, stop).
 
-stats (Channel) ->
-  find_and_call (Channel, stats).
-
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
-init ([ Channel = #lwes_channel {
-                    ip = Ip,
-                    port = Port,
-                    is_multicast = IsMulticast,
-                    ttl = TTL,
-                    recbuf = Recbuf,
-                    type = Type
-                 }
-      ]) ->
-  { ok, Socket }=
-    case {Type, IsMulticast} of
-      {listener, true} ->
-        gen_udp:open ( Port,
-                       [ { reuseaddr, true },
-                         { ip, Ip },
-                         { multicast_ttl, TTL },
-                         { multicast_loop, false },
-                         { add_membership, {Ip, {0,0,0,0}}},
-                         { recbuf, Recbuf },
-                         binary
-                         | reuseport()
-                       ]);
-      {listener, false} ->
-        gen_udp:open ( Port,
-                       [ { recbuf, Recbuf },
-                         { reuseaddr, true },
-                         binary
-                         | reuseport()
-                       ]);
-      {_, _} ->
-        case IsMulticast of
-          true ->
-            gen_udp:open ( 0,
-                           [ { recbuf, Recbuf },
-                             { multicast_ttl, TTL },
-                             binary
-                           ]);
-          false ->
-            gen_udp:open ( 0,
-                           [ { recbuf, Recbuf },
-                             binary
-                           ])
-        end
-    end,
+init ([ Channel = #lwes_channel { type = Type, config = Config } ]) ->
+  { ok, Socket } = lwes_net_udp:open (Type, Config),
+  lwes_stats:initialize (lwes_net_udp:address(Config)),
   lwes_channel_manager:register_channel (Channel, self()),
   { ok, #state { socket = Socket,
                  channel = Channel,
@@ -148,68 +81,59 @@ handle_call ({ send, Packet },
              _From,
              State = #state {
                socket = Socket,
-               channel = #lwes_channel { ip = Ip, port = Port },
-               sent = Sent
+               channel = #lwes_channel { config = Config }
              }) ->
-  { reply,
-    gen_udp:send (Socket, Ip, Port, Packet),
-    State#state { sent = Sent + 1 }
-  };
-handle_call (stats,
-             _From,
-             State = #state {
-               sent = Sent,
-               received = Received
-             }) ->
-  { reply, {Sent, Received}, State };
-
-handle_call (Request, From, State) ->
-  error_logger:warning_msg ("unrecognized call ~p from ~p~n",[Request, From]),
+  Reply =
+    case lwes_net_udp:send (Socket, Config, Packet) of
+      ok ->
+        lwes_stats:increment_sent(lwes_net_udp:address(Config)),
+        ok;
+      {error, Error} ->
+        lwes_stats:increment_errors(lwes_net_udp:address(Config)),
+        {error, Error}
+    end,
+  { reply, Reply, State };
+handle_call (_Request, _From, State) ->
   { reply, ok, State }.
 
 handle_cast (stop, State) ->
   {stop, normal, State};
-handle_cast (Request, State) ->
-  error_logger:warning_msg ("unrecognized cast ~p~n",[Request]),
+handle_cast (_Request, State) ->
   { noreply, State }.
 
 % skip if we don't have a handler
 handle_info ( {udp, _, _, _, _},
               State = #state {
                 type = listener,
-                callback = undefined,
-                received = Received
+                channel = #lwes_channel { config = Config },
+                callback = undefined
               } ) ->
-  { noreply, State#state { received = Received + 1 } };
+  lwes_stats:increment_received (lwes_net_udp:address(Config)),
+  { noreply, State };
 
 handle_info ( Packet = {udp, _, _, _, _},
               State = #state {
                 type = listener,
+                channel = #lwes_channel { config = Config },
                 callback = #callback { function = Function,
                                        format   = Format,
-                                       state    = CbState },
-                received = Received
+                                       state    = CbState }
               } ) ->
-  Event =
-    case Format of
-      raw -> Packet;
-      _ -> lwes_event:from_udp_packet (Packet, Format)
-    end,
+  lwes_stats:increment_received (lwes_net_udp:address(Config)),
+  Event = lwes_event:from_udp_packet (Packet, Format),
   NewCbState = Function (Event, CbState),
   { noreply,
     State#state { callback = #callback { function = Function,
                                          format   = Format,
-                                         state    = NewCbState },
-                  received = Received + 1
+                                         state    = NewCbState }
                 }
   };
 
-handle_info ( Request, State) ->
-  error_logger:warning_msg ("unrecognized info ~p~n",[Request]),
+handle_info (_Request, State) ->
   {noreply, State}.
 
 terminate (_Reason, #state {socket = Socket, channel = Channel}) ->
-  gen_udp:close (Socket),
+  lwes_net_udp:close (Socket),
   lwes_channel_manager:unregister_channel (Channel).
 
 code_change (_OldVsn, State, _Extra) ->
@@ -218,23 +142,6 @@ code_change (_OldVsn, State, _Extra) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-is_multicast ({N1, _, _, _}) when N1 >= 224, N1 =< 239 ->
-  true;
-is_multicast (_) ->
-  false.
-
-reuseport() ->
-  case os:type() of
-    {unix, linux} ->
-      [ {raw, 1, 15, <<1:32/native>>} ];
-    {unix, OS} when OS =:= darwin;
-                    OS =:= freebsd;
-                    OS =:= openbsd;
-                    OS =:= netbsd ->
-      [ {raw, 16#ffff, 16#0200, <<1:32/native>>} ];
-    _ -> []
-  end.
-
 find_and_call (Channel, Msg) ->
   case lwes_channel_manager:find_channel (Channel) of
     {error, not_open} ->

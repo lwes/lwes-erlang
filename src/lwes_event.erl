@@ -247,12 +247,10 @@ to_iolist (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
       to_iolist (Event#lwes_event { attrs = dict:to_list (Dict) });
     A ->
       NumAttrs = length (A),
-      iolist_to_binary (
-        [ write_name (EventName),
-          <<NumAttrs:16/integer-unsigned-big>>,
-          write_attrs (A, [])
-        ]
-      )
+      [ write_name (EventName),
+        <<NumAttrs:16/integer-unsigned-big>>,
+        write_attrs (A, [])
+      ]
   end;
 to_iolist (Event) ->
   % assume if we get anything else it's either a binary or an iolist
@@ -304,6 +302,8 @@ has_header_fields (B) when is_binary(B) ->
       false
   end.
 
+from_udp_packet (Packet, raw) ->
+  Packet;
 from_udp_packet ({ udp, Socket, SenderIP, SenderPort, Packet }, Format) ->
   % allow ReceiptTime to come in via the second element of the tuple in
   % some cases, this was put in place to work with the journal listener

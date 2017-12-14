@@ -6,7 +6,6 @@
 % API
 -export ([normalize_ip/1,
           ip2bin/1,
-          check_ip_port/1,
           ceiling/1,
           count_ones/1,
           any_to_list/1,
@@ -37,44 +36,6 @@ ip2bin (Ip) when is_binary (Ip) ->
 ip2bin (Ip) ->
   list_to_binary (inet_parse:ntoa (Ip)).
 
-check_ip_port ({Ip, Port, Options}) when is_list(Options) ->
-  case { proplists:get_value (ttl, Options),
-         proplists:get_value (recbuf, Options) } of
-    { undefined, undefined } -> check_ip_port ({Ip, Port});
-    { TTL,       undefined } -> check_ip_port ({Ip, Port, TTL});
-    { undefined, RecBuf    } -> check_ip_port ({Ip, Port, 5, RecBuf });
-    { TTL,       RecBuf    } -> check_ip_port ({Ip, Port, TTL, RecBuf })
-  end;
-check_ip_port ({Ip, Port, TTL, Recbuf})
-    when ?is_ip_addr (Ip) andalso ?is_uint16 (Port)
-         andalso ?is_ttl (TTL) andalso is_integer(Recbuf) ->
-  {Ip, Port, TTL, Recbuf};
-check_ip_port ({Ip, Port, TTL, Recbuf})
-    when is_list (Ip) andalso ?is_uint16 (Port)
-         andalso ?is_ttl (TTL) andalso is_integer(Recbuf) ->
-  case inet_parse:address (Ip) of
-    {ok, {N1, N2, N3, N4}} -> {{N1, N2, N3, N4}, Port, TTL, Recbuf};
-    _ -> erlang:error(badarg)
-  end;
-check_ip_port ({Ip, Port, TTL})
-    when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
-  {Ip, Port, TTL};
-check_ip_port ({Ip, Port, TTL})
-    when is_list (Ip) andalso ?is_uint16 (Port) andalso ?is_ttl (TTL) ->
-  case inet_parse:address (Ip) of
-    {ok, {N1, N2, N3, N4}} -> {{N1, N2, N3, N4}, Port, TTL};
-    _ -> erlang:error(badarg)
-  end;
-check_ip_port ({Ip, Port}) when ?is_ip_addr (Ip) andalso ?is_uint16 (Port) ->
-  {Ip, Port};
-check_ip_port ({Ip, Port}) when is_list (Ip) andalso ?is_uint16 (Port) ->
-  case inet_parse:address (Ip) of
-    {ok, {N1, N2, N3, N4}} -> {{N1, N2, N3, N4}, Port};
-    _ -> erlang:error(badarg)
-  end;
-check_ip_port (_) ->
-  % essentially turns function_clause error into badarg
-  erlang:error (badarg).
 
 ceiling(X) when X < 0 ->
     trunc(X);
@@ -172,22 +133,6 @@ normalize_ip_test_ () ->
     ?_assertError (badarg, normalize_ip ({655,0,0,1}))
   ].
 
-check_ip_port_test_ () ->
-  [
-    ?_assertEqual ({{127,0,0,1},9191,3, 65535},
-                   check_ip_port ({{127,0,0,1},9191,3, 65535})),
-    ?_assertEqual ({{127,0,0,1},9191,3, 65535},
-                   check_ip_port ({"127.0.0.1",9191,3, 65535})),
-    ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({"127.0.0.1",9191,3})),
-    ?_assertEqual ({{127,0,0,1},9191,3}, check_ip_port ({{127,0,0,1},9191,3})),
-    ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({"127.0.0.1",9191})),
-    ?_assertEqual ({{127,0,0,1},9191}, check_ip_port ({{127,0,0,1},9191})),
-    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191,3})),
-    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191,65})),
-    ?_assertError (badarg, check_ip_port ({"655.0.0.1",9191})),
-    ?_assertError (badarg, check_ip_port ({{655,0,0,1},9191})),
-    ?_assertError (badarg, check_ip_port ({{127,0,0,1},91919}))
-  ].
 
 ceil_test_ () ->
   [

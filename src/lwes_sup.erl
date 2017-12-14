@@ -22,6 +22,13 @@ init([]) ->
     {
       { one_for_one, 10, 10 },
       [
+        { lwes_stats,
+          { lwes_stats, start_link, [] },
+          permanent,
+          2000,
+          worker,
+          [ lwes_stats ]
+        },
         { lwes_channel_manager,                    % child spec id
           { lwes_channel_manager, start_link, [] },% child function to call
           permanent,                               % always restart

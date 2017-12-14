@@ -41,7 +41,7 @@
 
 %% API
 -export ([ start/0,
-           open/2,
+           open/2,            % (Type, Config) -> {ok, Channel}
            emit/2,
            emit/3,
            listen/4,
@@ -111,8 +111,8 @@ start () ->
 open (emitters, Config) ->
   lwes_multi_emitter:open (Config);
 open (Type, Config) when Type =:= emitter; Type =:= listener ->
-  try lwes_util:check_ip_port (Config) of
-    C -> lwes_channel:open (Type, C)
+  try lwes_channel:new (Type, Config) of
+    C -> lwes_channel:open (C)
   catch
     _:_ -> { error, bad_ip_port }
   end;
@@ -195,15 +195,7 @@ stats () ->
   case application:get_application (lwes) of
     undefined -> {error, {not_started, lwes}};
     _ ->
-      io:format ("~-21s ~-20s ~-20s~n",["channel", "sent", "received"]),
-      io:format ("~-21s ~-20s ~-20s~n",["---------------------",
-                                        "--------------------",
-                                        "--------------------"]),
-      [ io:format ("~-21s ~-20b ~-20b~n",
-          [ io_lib:format ("~s:~-5b",[lwes_util:ip2bin (Ip), Port]),
-            Sent, Received])
-        || {Ip, Port, Sent, Received }
-        <- lwes_channel_manager:stats () ],
+      lwes_stats:print(none),
       ok
   end.
 
@@ -211,11 +203,7 @@ stats_raw () ->
   case application:get_application (lwes) of
     undefined -> {error, {not_started, lwes}};
     _ ->
-      [ {lists:flatten (
-            io_lib:format ("~s:~-5b",[lwes_util:ip2bin (Ip), Port])),
-         Sent, Received }
-         || {Ip, Port, Sent, Received }
-        <- lwes_channel_manager:stats () ]
+      lwes_stats:rollup(none)
   end.
 
 %
@@ -244,5 +232,146 @@ enable_validation (ESFInfo) ->
 %%====================================================================
 -ifdef (TEST).
 -include_lib ("eunit/include/eunit.hrl").
+
+-define(TEST_TABLE, lwes_test).
+
+setup() ->
+  ok = application:start(lwes),
+  ets:new(?TEST_TABLE,[named_table,public]),
+  ok.
+
+teardown(ok) ->
+  ets:delete(?TEST_TABLE),
+  application:stop(lwes).
+
+build_one (EventsToSend, PerfectPercent,
+           EmitterConfig, EmitterType, ListenerConfigs) ->
+  fun() ->
+    Listeners =
+      [ begin
+          {ok, L} = open(listener, LC),
+          listen (L,
+                  fun({udp,_,_,_,E},A) ->
+                    [{E}] = ets:lookup(?TEST_TABLE, E),
+                    A
+                  end,
+                  raw, ok),
+          L
+        end
+        || LC <- ListenerConfigs
+      ],
+    {ok, Emitter0} = open(EmitterType,EmitterConfig),
+
+    InitialEvent = lwes_event:new("foo"),
+    EmitterFinal =
+      lists:foldl(
+        fun (C, EmitterIn) ->
+          EventWithCounter = lwes_event:set_uint16(InitialEvent,"bar",C),
+          Event = lwes_event:to_binary(EventWithCounter),
+          ets:insert(?TEST_TABLE, {Event}),
+          emit(EmitterIn, Event)
+        end,
+        Emitter0,
+        lists:seq(1,EventsToSend)
+      ),
+    timer:sleep(500),
+    close(EmitterFinal),
+    [ close(L) || L <- Listeners ],
+
+    Rollup = lwes_stats:rollup(none),
+    {Sent,Received} =
+      lists:foldl (fun ([_,S,R,_,_,_],{AS,AR}) ->
+                     % calculated the actual percent received
+                     Percent = S/EventsToSend*100,
+                     % and then check if the difference is within
+                     % 15 percent which is about what I was seeing
+                     % while testing
+                     WithinBound = abs(PerfectPercent-Percent) < 15,
+                     case WithinBound of
+                       true -> ok;
+                       false ->
+                         ?debugFmt("WARNING: out of bounds : "
+                                   "abs(~p-~p) < 15 => ~p~n",
+                                   [PerfectPercent, Percent, WithinBound]),
+                         ok
+                     end,
+                     ?assert(WithinBound),
+                     {AS + S, AR + R}
+                   end,
+                   {0,0},
+                   Rollup
+                  ),
+    ?assertEqual(Sent, Received)
+  end.
+
+simple_test_ () ->
+  NumberToSendTo = 1,
+  EventsToSend = 100,
+  EmitterConfig = {"127.0.0.1",12321},
+  EmitterType = emitter,
+  ListenerConfigs = [ EmitterConfig ],
+  PerfectPercent = EventsToSend / length(ListenerConfigs) * NumberToSendTo,
+  { setup,
+    fun setup/0,
+    fun teardown/1,
+    [
+      build_one (EventsToSend, PerfectPercent,
+                 EmitterConfig, EmitterType, ListenerConfigs)
+    ]
+  }.
+
+
+multi_random_test_ () ->
+  NumberToSendTo = 2,
+  ListenerConfigs = [ {"127.0.0.1", 30000},
+                      {"127.0.0.1", 30001},
+                      {"127.0.0.1", 30002}
+                    ],
+  EmitterConfig = { NumberToSendTo, random, ListenerConfigs },
+  EmitterType = emitters,
+  EventsToSend = 100,
+  % calculate the perfect number of events per listener we should get
+  % this is used below
+  PerfectPercent = EventsToSend / length(ListenerConfigs) * NumberToSendTo,
+  { setup,
+    fun setup/0,
+    fun teardown/1,
+    [
+      build_one (EventsToSend, PerfectPercent,
+                 EmitterConfig, EmitterType, ListenerConfigs)
+    ]
+  }.
+
+grouped_random_test_ () ->
+  NumberToSendTo = 3,
+  Group1Config = [ { "127.0.0.1", 5301 },
+                   { "127.0.0.1", 5302 }
+                 ],
+  Group2Config = [ { "127.0.0.1", 5303 },
+                   { "127.0.0.1", 5304 }
+                 ],
+  Group3Config = [ { "127.0.0.1", 5305 },
+                   { "127.0.0.1", 5306 }
+                 ],
+  ListenerConfigs = Group1Config ++ Group2Config ++ Group3Config,
+  EmitterConfig = { NumberToSendTo, group,
+                    [
+                      { 1, random, Group1Config },
+                      { 1, random, Group2Config },
+                      { 1, random, Group3Config }
+                    ]
+                  },
+  EmitterType = emitters,
+  EventsToSend = 100,
+  PerfectPercent = EventsToSend / length(ListenerConfigs) * NumberToSendTo,
+  { setup,
+    fun setup/0,
+    fun teardown/1,
+    [
+      build_one (EventsToSend, PerfectPercent,
+                 EmitterConfig, EmitterType, ListenerConfigs)
+    ]
+  }.
+
 
 -endif.

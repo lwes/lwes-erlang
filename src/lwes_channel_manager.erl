@@ -11,8 +11,7 @@
            register_channel/2,
            unregister_channel/1,
            find_channel/1,
-           close_channel/1,
-           stats/0
+           close_channel/1
          ]).
 
 %% gen_server callbacks
@@ -48,19 +47,6 @@ find_channel (Channel) ->
     [{_Channel, Pid}] -> Pid
   end.
 
-stats () ->
-  case ets:info (?TABLE) of
-    undefined -> ok;
-    _ ->
-      [ begin
-          {Sent, Received} = lwes_channel:stats(C),
-          {Ip, Port, Sent, Received}
-        end
-        || {C,_} = {#lwes_channel {ip = Ip, port = Port},_}
-        <- ets:tab2list (?TABLE)
-      ]
-  end.
-
 close_channel (Channel) ->
   gen_server:call (find_channel (Channel), stop).
 
@@ -68,11 +54,7 @@ close_channel (Channel) ->
 %% gen_server callbacks
 %%====================================================================
 init ([]) ->
-  ets:new (?TABLE, [ named_table
-      % FIXME: in versions up to R14B, dialyzer doesn't like the next
-      %        line, so commented out for the moment
-%                     { read_concurrency, true },
-                   ]),
+  ets:new (?TABLE, [ named_table, { read_concurrency, true } ]),
   { ok, #state {} }.
 
 handle_call ({reg, Key, Val}, _From, State) ->

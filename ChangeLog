@@ -1,3 +1,11 @@
+Version 4.5.0 (molinaro)
+  * Moved stats into an ETS table
+  * Removed queue config type (it was never used)
+  * Fix to lwes_event:to_iolist/1 where it was converting to binary
+  * consolidated network code into new module
+  * lots of unit testing added
+  * changed crypto:rand_uniform/1 to rand:uniform/1
+
 Version 4.4.1 (timrc)
   * Minor validator patches
     * Log message for extra, unexpected fields.

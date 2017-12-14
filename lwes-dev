@@ -6,6 +6,7 @@ for d in deps/* ; do
 done
 exec erl \
   -name lwes -setcookie lwes \
+  -config lwes.config \
   $deps \
   -pa ebin \
   -s lwes_app

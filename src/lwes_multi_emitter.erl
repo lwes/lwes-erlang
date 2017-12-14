@@ -18,8 +18,6 @@
 %%====================================================================
 %% API
 %%====================================================================
-open ({M, N}) ->
-  open ({M, queue, N});
 open ({M, group, N}) ->
    case M of
     _ when is_integer (M), M >= 1, M =:= length (N) ->
@@ -29,7 +27,7 @@ open ({M, group, N}) ->
     _ ->
       { error, bad_m_value }
   end;
-open ({M, Type, N}) ->
+open ({M, random, N}) ->
   case M of
     _ when is_integer (M), M >= 1 ->
       case open_emitters (N) of
@@ -37,14 +35,8 @@ open ({M, Type, N}) ->
           {error, Error};
         E ->
           Combos = allm (M, E),
-          case Type of
-            queue ->
-              MyN = queue:from_list (Combos),
-              { ok, #lwes_multi_emitter { type = queue, m  = M, n = MyN } };
-            random ->
-              MyN = list_to_tuple (Combos),
-              {ok, #lwes_multi_emitter { type = random, m = M, n = MyN }}
-          end
+          MyN = list_to_tuple (Combos),
+          {ok, #lwes_multi_emitter { type = random, m = M, n = MyN }}
       end;
     _ ->
       { error, bad_m_value }
@@ -54,37 +46,20 @@ emit (Emitters = #lwes_multi_emitter { type = group, n = NIn }, Bin) ->
   Emitters#lwes_multi_emitter { n = [ emit (N, Bin) || N <- NIn ] };
 emit (Emitters = #lwes_multi_emitter { type = random,  n = NIn }, Bin) ->
   % get list to emit to as a random entry from list
-  Index = crypto:rand_uniform (1, tuple_size (NIn) + 1),
+  Index = rand:uniform (tuple_size (NIn)),
   ToEmitTo = element (Index, NIn),
 
   % emit event to each
   lists:foreach (fun (E) ->
                    lwes_channel:send_to (E, Bin)
                  end, ToEmitTo),
-  Emitters;
-
-emit (Emitters = #lwes_multi_emitter { type = queue,  n = NIn }, Bin) ->
-  % get list to emit to from queue
-  {{value, ToEmitTo},NTmp} = queue:out (NIn),
-
-  % emit event to each
-  lists:foreach (fun (E) ->
-                   lwes_channel:send_to (E, Bin)
-                 end, ToEmitTo),
-
-  % put back into queue
-  NOut = queue:in (ToEmitTo, NTmp),
-
-  Emitters#lwes_multi_emitter { n = NOut }.
+  Emitters.
 
 close (#lwes_multi_emitter { type = group, n = N }) ->
   [ close (E) || E <- N ],
   ok;
 close (#lwes_multi_emitter { type = random, n = N }) ->
   close_emitters (lists:usort(lists:flatten(tuple_to_list (N)))),
-  ok;
-close (#lwes_multi_emitter { type = queue, n = N }) ->
-  close_emitters (lists:usort(lists:flatten(queue:to_list(N)))),
   ok.
 
 %%====================================================================

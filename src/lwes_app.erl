@@ -12,7 +12,7 @@
 %-                                  API                                -
 %-=====================================================================-
 start () ->
-  [ensure_started (App) || App <- [sasl, lwes]].
+  application:ensure_all_started(lwes).
 
 %-=====================================================================-
 %-                        application callbacks                        -
@@ -26,13 +26,6 @@ stop (_State) ->
 %-=====================================================================-
 %-                               Private                               -
 %-=====================================================================-
-ensure_started(App) ->
-  case application:start(App) of
-    ok ->
-      ok;
-    {error, {already_started, App}} ->
-      ok
-  end.
 
 %-=====================================================================-
 %-                            Test Functions                           -
@@ -42,8 +35,8 @@ ensure_started(App) ->
 
 lwes_app_test_ () ->
   [
-    ?_assertEqual ([ok, ok],lwes_app:start()),
-    ?_assertEqual ([ok, ok],lwes_app:start()),
+    ?_assertEqual ({ok, [lwes]},lwes_app:start()),
+    ?_assertEqual ({ok, []},lwes_app:start()),
     ?_assertEqual (ok, application:stop (lwes))
   ].
 
