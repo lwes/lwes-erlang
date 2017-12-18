@@ -18,8 +18,10 @@
 %%====================================================================
 %% API
 %%====================================================================
+open (Config = {H,P}) when is_list(H), is_integer(P) ->
+  lwes:open (emitter, Config);
 open ({M, group, N}) ->
-   case M of
+  case M of
     _ when is_integer (M), M >= 1, M =:= length (N) ->
       {ok,
         #lwes_multi_emitter { type = group, m  = M,
@@ -53,14 +55,19 @@ emit (Emitters = #lwes_multi_emitter { type = random,  n = NIn }, Bin) ->
   lists:foreach (fun (E) ->
                    lwes_channel:send_to (E, Bin)
                  end, ToEmitTo),
-  Emitters.
+  Emitters;
+emit (E, Bin) ->
+  lwes_channel:send_to (E, Bin),
+  E.
 
 close (#lwes_multi_emitter { type = group, n = N }) ->
   [ close (E) || E <- N ],
   ok;
 close (#lwes_multi_emitter { type = random, n = N }) ->
   close_emitters (lists:usort(lists:flatten(tuple_to_list (N)))),
-  ok.
+  ok;
+close (E) ->
+  lwes:close(E).
 
 %%====================================================================
 %% Internal functions

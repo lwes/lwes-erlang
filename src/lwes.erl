@@ -108,6 +108,8 @@ start () ->
 %  }
 %  which should send each event to one machine in each group
 %
+open (emitters, {N, L}) when is_integer(N), is_list(L) ->
+  open (emitters, {N, group, L});
 open (emitters, Config) ->
   lwes_multi_emitter:open (Config);
 open (Type, Config) when Type =:= emitter; Type =:= listener ->
@@ -320,6 +322,24 @@ simple_test_ () ->
     ]
   }.
 
+mondemand_legacy_test_ () ->
+  Address = {"127.0.0.1",12321},
+  NumberToSendTo = 1,
+  EventsToSend = 100,
+  % mondemand used the queue form which I got rid of, now I'm converting
+  % those to group configs, so the following should work
+  EmitterConfig = {NumberToSendTo, [Address]},
+  EmitterType = emitters,
+  ListenerConfigs = [ Address ],
+  PerfectPercent = EventsToSend / length(ListenerConfigs) * NumberToSendTo,
+  { setup,
+    fun setup/0,
+    fun teardown/1,
+    [
+      build_one (EventsToSend, PerfectPercent,
+                 EmitterConfig, EmitterType, ListenerConfigs)
+    ]
+  }.
 
 multi_random_test_ () ->
   NumberToSendTo = 2,

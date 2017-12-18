@@ -1,3 +1,6 @@
+Version 4.5.1 (molinar)
+  * Need to support an older form of opening channels for mondemand
+
 Version 4.5.0 (molinaro)
   * Moved stats into an ETS table
   * Removed queue config type (it was never used)
