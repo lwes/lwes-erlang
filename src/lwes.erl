@@ -322,6 +322,24 @@ simple_test_ () ->
     ]
   }.
 
+mondemand_w_ttl_test_ () ->
+  Address = {"127.0.0.1",12321, 25},
+  NumberToSendTo = 1,
+  EventsToSend = 100,
+  EmitterConfig = {NumberToSendTo, [Address]},
+  EmitterType = emitters,
+  ListenerConfigs = [ Address ],
+  PerfectPercent = EventsToSend / length(ListenerConfigs) * NumberToSendTo,
+  { setup,
+    fun setup/0,
+    fun teardown/1,
+    [
+      build_one (EventsToSend, PerfectPercent,
+                 EmitterConfig, EmitterType, ListenerConfigs)
+    ]
+  }.
+
+
 mondemand_legacy_test_ () ->
   Address = {"127.0.0.1",12321},
   NumberToSendTo = 1,

@@ -18,8 +18,6 @@
 %%====================================================================
 %% API
 %%====================================================================
-open (Config = {H,P}) when is_list(H), is_integer(P) ->
-  lwes:open (emitter, Config);
 open ({M, group, N}) ->
   case M of
     _ when is_integer (M), M >= 1, M =:= length (N) ->
@@ -42,7 +40,9 @@ open ({M, random, N}) ->
       end;
     _ ->
       { error, bad_m_value }
-  end.
+  end;
+open (Config) ->
+  lwes:open (emitter, Config).
 
 emit (Emitters = #lwes_multi_emitter { type = group, n = NIn }, Bin) ->
   Emitters#lwes_multi_emitter { n = [ emit (N, Bin) || N <- NIn ] };

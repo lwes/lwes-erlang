@@ -1,4 +1,7 @@
-Version 4.5.1 (molinar)
+Version 4.5.2 (molinaro)
+  * Support ttl for opening mondemand channels
+
+Version 4.5.1 (molinaro)
   * Need to support an older form of opening channels for mondemand
 
 Version 4.5.0 (molinaro)
