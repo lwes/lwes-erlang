@@ -14,7 +14,7 @@
          address/1
         ]).
 
--define (DEFAULT_TTL, 12).
+-define (DEFAULT_TTL, 25).
 -define (DEFAULT_RECBUF, 16777216).
 
 -record(lwes_net_udp, { ip                       :: inet:ip_address(),

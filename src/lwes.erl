@@ -107,13 +107,17 @@ start () ->
 %    ]
 %  }
 %  which should send each event to one machine in each group
-%
+
+% Support older queue like config using groups which should work the same
+% way
 open (emitters, {N, L}) when is_integer(N), is_list(L) ->
   open (emitters, {N, group, L});
 open (emitters, Config) ->
-  lwes_multi_emitter:open (Config);
-open (Type, Config) when Type =:= emitter; Type =:= listener ->
-  try lwes_channel:new (Type, Config) of
+  lwes_multi_emitter:new (Config);
+open (emitter, Config) ->
+  open (emitters, {1, group, [Config]});
+open (listener, Config) ->
+  try lwes_channel:new (listener, Config) of
     C -> lwes_channel:open (C)
   catch
     _:_ -> { error, bad_ip_port }
@@ -134,8 +138,9 @@ emit (Channel, Event) when is_record (Channel, lwes_channel) ->
   lwes_channel:send_to (Channel, lwes_event:to_binary (Event)),
   % channel doesn't actually change for a single emitter
   Channel;
-emit (Channels, Event) when is_record (Channels, lwes_multi_emitter) ->
-  lwes_multi_emitter:emit (Channels, lwes_event:to_binary (Event)).
+emit (Channels, Event) ->
+  lwes_multi_emitter:emit (Channels, Event),
+  Channels.
 
 % emit an event to one or more channels
 emit (Channel, Event, SpecName) ->
@@ -190,7 +195,7 @@ listen (Channel, CallbackFunction, EventType, CallbackInitialState)
 % close the channel or channels
 close (Channel) when is_record (Channel, lwes_channel) ->
   lwes_channel:close (Channel);
-close (Channels) when is_record (Channels, lwes_multi_emitter) ->
+close (Channels) ->
   lwes_multi_emitter:close (Channels).
 
 stats () ->

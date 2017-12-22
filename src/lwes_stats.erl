@@ -57,28 +57,48 @@
 start_link () ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-initialize (Id) ->
+initialize (Id = {_, {_,_}}) ->
+  init0 (Id);
+initialize (Id = {_, _}) ->
+  init0 (Id);
+initialize (_) ->
+  erlang:error(badarg).
+
+init0 (Id) ->
   ets:insert_new (?TABLE, #stats {id = Id}).
 
 increment_sent (Id) ->
-  [V] = ets:update_counter (?TABLE, Id, [{?STATS_SENT_INDEX,1}]),
+  [V] = try_update_counter (Id, ?STATS_SENT_INDEX, 1),
   V.
 
 increment_received (Id) ->
-  [V] = ets:update_counter (?TABLE, Id, [{?STATS_RECEIVED_INDEX,1}]),
+  [V] = try_update_counter (Id, ?STATS_RECEIVED_INDEX, 1),
   V.
 
 increment_errors (Id) ->
-  [V] = ets:update_counter (?TABLE, Id, [{?STATS_ERRORS_INDEX,1}]),
+  [V] = try_update_counter (Id, ?STATS_ERRORS_INDEX, 1),
   V.
 
 increment_considered (Id) ->
-  [V] = ets:update_counter (?TABLE, Id, [{?STATS_CONSIDERED_INDEX,1}]),
+  [V] = try_update_counter (Id, ?STATS_CONSIDERED_INDEX, 1),
   V.
 
 increment_validated (Id) ->
-  [V] = ets:update_counter (?TABLE, Id, [{?STATS_VALIDATED_INDEX,1}]),
+  [V] = try_update_counter (Id, ?STATS_VALIDATED_INDEX, 1),
   V.
+
+update_counter (Id, Index, Amount) ->
+  ets:update_counter (?TABLE, Id, [{Index,Amount}]).
+
+try_update_counter (Id, Index, Amount) ->
+  try update_counter (Id, Index, Amount) of
+    V -> V
+  catch
+    error:badarg ->
+      initialize (Id),
+      update_counter (Id, Index, Amount)
+  end.
+
 
 delete (Id) ->
   ets:delete (?TABLE, Id).
@@ -281,7 +301,7 @@ lwes_stats_test_ () ->
   IdWithLabel = {foo,{{127,0,0,1},9191}},
   IdNoLabel = {{127,0,0,1},9191},
   BadId = undefined,
-  NonExistentId = {bar,{{127,0,0,1},9292}},
+  NonExistentId = {foo, bar,{{127,0,0,1},9292}},
   { setup,
     fun setup/0,
     fun cleanup/1,

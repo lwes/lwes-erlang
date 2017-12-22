@@ -30,7 +30,7 @@
                          config,
                          ref
                        }).
--record (lwes_multi_emitter, {type, m, n}).
+-record (lwes_multi_emitter, {type, max, num, configs}).
 
 -define (LWES_TYPE_U_INT_16,            1).
 -define (LWES_TYPE_INT_16,              2).

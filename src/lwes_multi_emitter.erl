@@ -10,7 +10,8 @@
 -include ("lwes_internal.hrl").
 
 %% API
--export ([ open/1,
+-export ([ new/1,
+           select/1,
            emit/2,
            close/1
          ]).
@@ -18,106 +19,75 @@
 %%====================================================================
 %% API
 %%====================================================================
-open ({M, group, N}) ->
-  case M of
-    _ when is_integer (M), M >= 1, M =:= length (N) ->
-      {ok,
-        #lwes_multi_emitter { type = group, m  = M,
-          n = [ begin {ok, Cout} = open (C), Cout end || C <- N] }};
+new ({NumToSelect, Type, ListOfSubConfigs})
+  when is_integer(NumToSelect),
+       (is_atom(Type) andalso (Type =:= group orelse Type =:= random)),
+       is_list(ListOfSubConfigs) ->
+
+  Max = length(ListOfSubConfigs),
+  case NumToSelect of
+     _ when NumToSelect >= 1; NumToSelect > Max ->
+      { ok,
+        #lwes_multi_emitter {
+          type = Type,
+          max  = Max,
+          num = NumToSelect,
+          configs = [ begin {ok, Cout} = new (Config), Cout end
+                      || Config <- ListOfSubConfigs ]
+        }
+      };
     _ ->
       { error, bad_m_value }
   end;
-open ({M, random, N}) ->
-  case M of
-    _ when is_integer (M), M >= 1 ->
-      case open_emitters (N) of
-        {error, Error} ->
-          {error, Error};
-        E ->
-          Combos = allm (M, E),
-          MyN = list_to_tuple (Combos),
-          {ok, #lwes_multi_emitter { type = random, m = M, n = MyN }}
-      end;
-    _ ->
-      { error, bad_m_value }
+new (Config) ->
+  {ok, lwes_net_udp:new (emitter, Config)}.
+
+select (#lwes_multi_emitter {type = _, max = N,
+                             num = N, configs = Configs}) ->
+  select (Configs);
+select (#lwes_multi_emitter {type = _, max = M,
+                             num = N, configs = Configs}) ->
+  Start = rand:uniform(M),
+  Config = list_to_tuple (Configs),
+  Indices = wrapped_range (Start, N, M),
+  case Indices of
+    [I] -> select (element(I,Config));
+    _ -> [ select(element(I, Config)) || I <- Indices ]
   end;
-open (Config) ->
-  lwes:open (emitter, Config).
+select (A = {_,_}) ->
+  A;
+select (L) when is_list(L) ->
+  [ select(E) || E <- L ];
+select (A) ->
+  lwes_net_udp:address(A).
 
-emit (Emitters = #lwes_multi_emitter { type = group, n = NIn }, Bin) ->
-  Emitters#lwes_multi_emitter { n = [ emit (N, Bin) || N <- NIn ] };
-emit (Emitters = #lwes_multi_emitter { type = random,  n = NIn }, Bin) ->
-  % get list to emit to as a random entry from list
-  Index = rand:uniform (tuple_size (NIn)),
-  ToEmitTo = element (Index, NIn),
+wrapped_range (Start, Number, Max) when Start > Max ->
+  wrapped_range (case Start rem Max of 0 -> Max; V -> V end, Number, Max);
+wrapped_range (Start, Number, Max) ->
+  wrapped_range (Start, Number, Max, []).
 
-  % emit event to each
-  lists:foreach (fun (E) ->
-                   lwes_channel:send_to (E, Bin)
-                 end, ToEmitTo),
-  Emitters;
-emit (E, Bin) ->
-  lwes_channel:send_to (E, Bin),
-  E.
+% determine a range of integers which wrap
+wrapped_range (_, 0, _, Accumulated) ->
+  lists:reverse (Accumulated);
+wrapped_range (Max, Number, Max, Accumulated) ->
+  wrapped_range (1, Number - 1, Max, [Max | Accumulated]);
+wrapped_range (Current, Number, Max, Accumulated) ->
+  wrapped_range (Current + 1, Number - 1, Max, [Current | Accumulated]).
 
-close (#lwes_multi_emitter { type = group, n = N }) ->
-  [ close (E) || E <- N ],
-  ok;
-close (#lwes_multi_emitter { type = random, n = N }) ->
-  close_emitters (lists:usort(lists:flatten(tuple_to_list (N)))),
-  ok;
-close (E) ->
-  lwes:close(E).
+emit (C, P) ->
+  Selected = select(C),
+  Packet = lwes_event:to_iolist(P),
+  lwes_emitter:send (lwes_emitters, Selected, Packet).
+
+close (#lwes_multi_emitter { configs = Configs }) ->
+  [ close(C) || C <- Configs ];
+close (O) ->
+  lwes_stats:delete (lwes_net_udp:address(O)).
+
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
-open_emitters (EmittersConfig) ->
-  open_emitters (EmittersConfig, []).
-
-open_emitters ([], E) ->
-  E;
-open_emitters ([Config | R], E) ->
-  case lwes:open (emitter, Config) of
-    {error, Error} ->
-      close_emitters (E),
-      {error, Error};
-    {ok, Emitter} ->
-      open_emitters (R, [Emitter | E])
-  end.
-
-close_emitters (Emitters) ->
-  lists:map (fun (E) -> lwes:close (E) end, Emitters).
-
-% get next m values from queue, then put back m-1 values
-nextm (M, Q) ->
-  % get first M elements from Q
-  {FQ, RQ} = queue:split (M, Q),
-
-  % save as the list we will return
-  O = queue:to_list (FQ),
-
-  % join the queue back together
-  TQ = queue:join (FQ, RQ),
-
-  % take the first value from the queue
-  {{value, H},OQ} = queue:out(TQ),
-
-  % put in back at the end
-  NQ = queue:in (H, OQ),
-  {O, NQ}.
-
-% find all m sets of values in a list of values
-allm (M, N) ->
-  Q = queue:from_list (N),
-  {_,Out} =
-    lists:foldl (fun (_, {QI,A}) ->
-                   {AO, QO} = nextm (M, QI),
-                   {QO, [AO|A]}
-                 end,
-                 {Q, []},
-                 N),
-  lists:reverse (Out).
 
 %%====================================================================
 %% Test functions
@@ -125,4 +95,53 @@ allm (M, N) ->
 -ifdef (TEST).
 -include_lib ("eunit/include/eunit.hrl").
 
+config (basic) ->
+  { "127.0.0.1", 9191 };
+config (random) ->
+  { 2, random,
+    [ {"127.0.0.1",30000}, {"127.0.0.1",30001}, {"127.0.0.1",30002} ] };
+config (group) ->
+  { 3, group,
+    [ {1, random, [ { "127.0.0.1",5390 }, { "127.0.0.1",5391 } ] },
+      {1, random, [ { "127.0.0.1",5392 }, { "127.0.0.1",5393 } ] },
+      {1, random, [ { "127.0.0.1",5394 }, { "127.0.0.1",5395 } ] }
+    ]
+  }.
+
+possible_answers (basic) ->
+  [ {{127,0,0,1},9191} ];
+possible_answers (random) ->
+  [
+    [{{127,0,0,1},30000}, {{127,0,0,1},30001}],
+    [{{127,0,0,1},30001}, {{127,0,0,1},30002}],
+    [{{127,0,0,1},30002}, {{127,0,0,1},30000}]
+  ];
+possible_answers (group) ->
+  [
+    [{{127,0,0,1},5390}, {{127,0,0,1},5392}, {{127,0,0,1},5394}],
+    [{{127,0,0,1},5390}, {{127,0,0,1},5392}, {{127,0,0,1},5395}],
+    [{{127,0,0,1},5390}, {{127,0,0,1},5393}, {{127,0,0,1},5394}],
+    [{{127,0,0,1},5390}, {{127,0,0,1},5393}, {{127,0,0,1},5395}],
+    [{{127,0,0,1},5391}, {{127,0,0,1},5392}, {{127,0,0,1},5394}],
+    [{{127,0,0,1},5391}, {{127,0,0,1},5392}, {{127,0,0,1},5395}],
+    [{{127,0,0,1},5391}, {{127,0,0,1},5393}, {{127,0,0,1},5394}],
+    [{{127,0,0,1},5391}, {{127,0,0,1},5393}, {{127,0,0,1},5395}]
+  ].
+
+check_selection_test_ () ->
+  [
+    [
+      [
+        begin
+          {ok, C} = new(config(T)),
+          ?_assert (lists:member (select(C), possible_answers(T)))
+        end
+        || _ <- lists:seq(1,100)
+      ]
+      || T <- [basic, random, group]
+    ]
+  ].
+
+
 -endif.
+
