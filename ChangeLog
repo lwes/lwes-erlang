@@ -1,115 +1,117 @@
-Version 4.6.0 (molinaro)
-  * Use a pool of sockets for emission.
+* Mon May 14 2018 Anthony Molinaro (djnym) 4.6.1
+- make dialyzer clean under rebar3
+- switch to different ChangeLog format
+- derive version in .app.src from ChangeLog
 
-Version 4.5.2 (molinaro)
-  * Support ttl for opening mondemand channels
+* Thu Dec 21 2017 Anthony Molinaro (djnym) 4.6.0
+- Use a pool of sockets for emission.
 
-Version 4.5.1 (molinaro)
-  * Need to support an older form of opening channels for mondemand
+* Thu Dec 21 2017 Anthony Molinaro (djnym) 4.5.2
+- Support ttl for opening mondemand channels
 
-Version 4.5.0 (molinaro)
-  * Moved stats into an ETS table
-  * Removed queue config type (it was never used)
-  * Fix to lwes_event:to_iolist/1 where it was converting to binary
-  * consolidated network code into new module
-  * lots of unit testing added
-  * changed crypto:rand_uniform/1 to rand:uniform/1
+* Mon Dec 18 2017 Anthony Molinaro (djnym) 4.5.1
+- Need to support an older form of opening channels for mondemand
 
-Version 4.4.1 (timrc)
-  * Minor validator patches
-    * Log message for extra, unexpected fields.
-    * Check for duplicate fields.
-    * Add unit tests.
+* Wed Dec 13 2017 Anthony Molinaro (djnym) 4.5.0
+- Moved stats into an ETS table
+- Removed queue config type (it was never used)
+- Fix to lwes_event:to_iolist/1 where it was converting to binary
+- consolidated network code into new module
+- lots of unit testing added
+- changed crypto:rand_uniform/1 to rand:uniform/1
 
-Version 4.4.0 (molinaro)
-  * change to allow emitting of iolists
-  * function added to allow easy appending of headers to event
-  * fixes for validation
+* Thu Jul 27 2017 Tim Crowder (timrc) 4.4.1
+- Minor validator patches
+--- Log message for extra, unexpected fields.
+--- Check for duplicate fields.
+--- Add unit tests.
 
-Version 4.3.0 (molinaro)
-  * Support added for esf based validation
+* Sat Sep 17 2016 Anthony Molinaro (djnym) 4.4.0
+- change to allow emitting of iolists
+- function added to allow easy appending of headers to event
+- fixes for validation
 
-Version 4.2.1 (twhalen)
-  * Fixed lwes:emit bug with lists of events
+* Fri Aug 05 2016 Anthony Molinaro (djnym) 4.3.0
+- Support added for esf based validation
 
-Version 4.2.0 (molinaro)
-  * attempt to use SO_REUSEPORT if available
-  * remove use of erlang:now() from lwes_journaller
+* Fri Jun 17 2016 Tim Whalen (twhalen) 4.2.1
+- Fixed lwes:emit bug with lists of events
 
-Version 4.1.0 (molinaro)
-  * recbuf now configurable (and defaults to the larger size)
-  * start at a journal_listener
+* Wed May 11 2016 Anthony Molinaro (djnym) 4.2.0 (molinaro)
+- attempt to use SO_REUSEPORT if available
+- remove use of erlang:now() from lwes_journaller
 
-Version 4.0.0 (molinaro)
-  * improved code coverage significantly, which fixed some issues?
-    * various json formats were structured poorly
-  * if incoming packet already has ReceiptTime, SenderIP and SenderPort
-  at the end of the event, don't add them (to keep proxied events honest).
-  This breaks backward compatibility in case someone was relying on the
-  previous behavior which was that fields showed up twice.
+* Thu Aug 20 2015 Anthony Molinaro (djnym) 4.1.0
+- recbuf now configurable (and defaults to the larger size)
+- start at a journal_listener
 
-Version 3.1.0 (molinaro)
-  * set default TTL for multicast to 5, also allow it to be overridden
+* Tue Aug 18 2015 Anthony Molinaro (djnym) 4.0.0
+- improved code coverage significantly, which fixed some issues?
+- various json formats were structured poorly
+- if incoming packet already has ReceiptTime, SenderIP and SenderPort
+at the end of the event, don't add them (to keep proxied events honest).
+This breaks backward compatibility in case someone was relying on the
+previous behavior which was that fields showed up twice.
 
-Version 3.0.1 (molinaro)
-  * fix eunit test from old refactor
+* Mon May 11 2015 Anthony Molinaro (djnym) 3.1.0
+- set default TTL for multicast to 5, also allow it to be overridden
 
-Version 3.0.0 (molinaro)
-  * allow for easy re-emission of events without deserializing
-  * prevent some malformed events (breaks backward compatibility for users of
-    lwes_event:peek_name_from_udp/1)
+* Wed May 14 2014 Anthony Molinaro (djnym) 3.0.1
+- fix eunit test from old refactor
 
-Version 2.4.0 (vikramkadi)
-  * New type long_string added to support strings bigger than
-  * 65kb 
+* Thu May 01 2014 Anthony Molinaro (djnym) 3.0.0
+- allow for easy re-emission of events without deserializing
+- prevent some malformed events (breaks backward compatibility for users of
+lwes_event:peek_name_from_udp/1)
 
-Version 2.3.1 (molinaro)
-  * there was an encoding bug with string types
+* Wed Mar 05 2014 Vikram Kadi (vikramkadi) 2.4.0
+- New type long_string added to support strings bigger than 65kb
 
-Version 2.3.0 (molinaro)
-  * added array types
+* Wed Feb 19 2014 Anthony Molinaro (djnym) 2.3.1
+- there was an encoding bug with string types
 
-Version 2.2.0 (molinaro)
-  * lwes_multi_emitter now supports randomly selecting groups to send to
-  * lwes_multi_emitter now supports groups (so nesting)
-  * send and receive stats are not collected and viewable
+* Tue Mar 26 2013 Anthony Molinaro (djnym) 2.3.0
+- added array types
 
-Version 2.1.2 (molinaro)
-  * hopefully last change, eep18 format should return a top-level tuple
+* Mon Oct 01 2012 Anthony Molinaro (djnym) 2.2.0
+- lwes_multi_emitter now supports randomly selecting groups to send to
+- lwes_multi_emitter now supports groups (so nesting)
+- send and receive stats are not collected and viewable
 
-Version 2.1.1 (molinaro)
-  * did the last version too fast missed some cases where json was used
+* Thu Sep 20 2012 Anthony Molinaro (djnym) 2.1.2
+- hopefully last change, eep18 format should return a top-level tuple
 
-Version 2.1.0 (molinaro)
-  * proplists was actually wrong as ejson requires eep18 and as that my
-    primary usecase for the json output, there are now 3 json decode formats
-    json will return mochijson2 struct format, json_proplist will return
-    the mochijson2 proplist formant, and json_eep18 will return the mochijson2
-    eep18 format
+* Thu Sep 20 2012 Anthony Molinaro (djnym) 2.1.1
+- did the last version too fast missed some cases where json was used
 
-Version 2.0.0 (molinaro)
-  * switch to decoding as proplists, instead of struct's
-  * moved some files from mochiweb into lwes, so I could skip the dependency
-  * don't check return code of send so that it doesn't crash lwes if the
-  network is down
+* Thu Sep 20 2012 Anthony Molinaro (djnym) 2.1.0
+- proplists was actually wrong as ejson requires eep18 and as that my
+primary usecase for the json output, there are now 3 json decode formats
+json will return mochijson2 struct format, json_proplist will return
+the mochijson2 proplist formant, and json_eep18 will return the mochijson2
+eep18 format
 
-Version 1.0.3 (molinaro)
-  * missing dependency
+* Mon Aug 13 2012 Anthony Molinaro (djnym) 2.0.0
+- switch to decoding as proplists, instead of struct's
+- moved some files from mochiweb into lwes, so I could skip the dependency
+- don't check return code of send so that it doesn't crash lwes if the network is down
 
-Version 1.0.2 (molinaro)
-  * need to increase recbuf size in order to journal everything
+* Tue Jun 28 2011 Anthony Molinaro (djnym) 1.0.3
+- missing dependency
 
-Version 1.0.1 (molinaro)
-  * zero length strings should be allowed
-  * for 'json' format, use mochijson2:decode for values
+* Wed Apr 13 2011 Anthony Molinaro (djnym) 1.0.2
+- need to increase recbuf size in order to journal everything
 
-Version 1.0.0 (molinaro)
-  * changed lwes:open to take different number of args, breaks backward
-  compatibility
-  * add 'dict' as a format for event attributes in deserialization
-  * added journaller
-  * added multi emitter
-  * added 'json' as a format for event deserialization
+* Fri Mar 25 2011 Anthony Molinaro (djnym) 1.0.1
+- zero length strings should be allowed
+- for 'json' format, use mochijson2:decode for values
 
-Version 0.0.0 (molinaro)
-  * Initial version
+* Sat Mar 19 2011 Anthony Moinaro (djnym) 1.0.0
+- changed lwes:open to take different number of args, breaks backward compatibility
+- add 'dict' as a format for event attributes in deserialization
+- added journaller
+- added multi emitter
+- added 'json' as a format for event deserialization
+
+* Wed Dec 22 2018 Anthony Molinaro (djnym) 0.0.0
+- Initial version

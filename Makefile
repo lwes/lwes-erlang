@@ -7,7 +7,7 @@ edoc:
 check:
 	@rm -rf .eunit
 	@mkdir -p .eunit
-	@dialyzer -Wno_opaque -Wno_improper_lists --src src | \
+	@dialyzer --src src | \
            fgrep -vf .dialyzer-ignore-warnings
 	@rebar eunit
 

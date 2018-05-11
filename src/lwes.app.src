@@ -1,6 +1,6 @@
 {application, lwes,
  [{description, "Light Weight Event System Erlang Bindings"},
-  {vsn, "4.6.0"},
+  {vsn, {cmd, "/bin/bash -c 'awk \"match(\\$0, /[0-9]+\\.[0-9]+(\\.[0-9]+)+/){print substr(\\$0, RSTART,RLENGTH); exit}\" ChangeLog'"}},
   {modules, []},
   {registered, [lwes_channel_manager,lwes_channel_sup,lwes_sup,lwes_stats,lwes_esf_validator]},
   {mod, {lwes_app, []}},

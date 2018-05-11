@@ -243,14 +243,14 @@ to_binary (Event) ->
 
 to_iolist (Event = #lwes_event { name = EventName, attrs = Attrs }) ->
   case Attrs of
-    Dict when is_tuple (Attrs) andalso element (1, Attrs) =:= dict ->
-      to_iolist (Event#lwes_event { attrs = dict:to_list (Dict) });
-    A ->
+    A when is_list(A) ->
       NumAttrs = length (A),
       [ write_name (EventName),
         <<NumAttrs:16/integer-unsigned-big>>,
         write_attrs (A, [])
-      ]
+      ];
+    Dict ->
+      to_iolist (Event#lwes_event { attrs = dict:to_list (Dict) })
   end;
 to_iolist (Event) ->
   % assume if we get anything else it's either a binary or an iolist
