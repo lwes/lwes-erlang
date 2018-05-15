@@ -283,7 +283,7 @@ check_config_test_ () ->
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = 3, recbuf = 65535,
-                                  options = [{raw, 1, 15, <<1:32/native>>}] },
+                                  options = reuseport()},
                    check_config ({"127.0.0.1",9191,
                                    [{ttl,3}, {recbuf,65535}, reuseport]})),
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
