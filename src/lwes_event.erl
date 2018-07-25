@@ -833,8 +833,8 @@ write (?LWES_STRING, Len, V) when is_list (V); is_binary (V) ->
 write (?LWES_LONG_STRING, Len, V) when is_list(V); is_binary (V) ->
   case Len of
     SL when SL =< 4294967295
-       -> <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big,
-            SL:32/integer-unsigned-big, V/binary>>;
+       -> [ <<?LWES_TYPE_LONG_STRING:8/integer-unsigned-big,
+            SL:32/integer-unsigned-big>>, V ];
      _ -> throw (string_too_big)
   end.
 
@@ -1998,21 +1998,44 @@ new_test_ () ->
                    set_ip_addr (new(foo),cat,"300.300.300.300"))
   ].
 
-long_string_test () ->
+long_string_test_ () ->
   B = large_bin (),
-  ?assertEqual (
-     #lwes_event {name = <<"foo">>, attrs = [{<<"bar">>, B}]},
-     from_binary (
-       to_binary (
-         #lwes_event {name = <<"foo">>, attrs = [{ "bar", B}]}
-         ))).
+  L = large_list (),
+  [
+    { "long string binary",
+      fun() ->
+        ?assertEqual (
+           #lwes_event {name = <<"foo">>, attrs = [{<<"bar">>, B}]},
+           from_binary (
+             to_binary (
+               #lwes_event {name = <<"foo">>, attrs = [{ "bar", B}]}
+               )))
+      end
+    },
+    { "long string list",
+      fun() ->
+        ?assertEqual (
+           #lwes_event {name = <<"foo">>, attrs = [{<<"bar">>, B}]},
+           from_binary (
+             to_binary (
+               #lwes_event {name = <<"foo">>, attrs = [{ "bar", L}]}
+               )))
+      end
+    }
+  ].
 
 large_bin () ->
   lists:foldl (fun (_, A) ->
-                 <<1:8, A/binary>>
+                 <<$a:8, A/binary>>
                end,
-               << >>,
+               <<>>,
                lists:seq (1, 99999)).
+large_list () ->
+  lists:foldl(fun (_, A) ->
+                [ $a | A ]
+              end,
+              [],
+              lists:seq (1,99999)).
 
 allow_atom_and_binary_for_strings_test_ () ->
   [ ?_assertEqual (
