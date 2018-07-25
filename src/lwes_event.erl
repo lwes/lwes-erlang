@@ -121,9 +121,9 @@ set_string (_,_,_) ->
   erlang:error(badarg).
 set_ip_addr (E = #lwes_event { attrs = A}, K, V) ->
   Ip = lwes_util:normalize_ip (V),
-  E#lwes_event { attrs = [ { ?LWES_IP_ADDR, K, Ip } | A ] };
-set_ip_addr (_,_,_) ->
-  erlang:error(badarg).
+  E#lwes_event { attrs = [ { ?LWES_IP_ADDR, K, Ip } | A ] }.
+% NOTE: no badarg case for set_ip_addr, as lwes_util:normalize_ip/1
+%       will throw badarg if there is an issue
 set_byte(E = #lwes_event { attrs = A}, K, V) when ?is_byte (V) ->
   E#lwes_event { attrs = [ { ?LWES_BYTE, K, V } | A ] };
 set_byte(_,_,_) ->
@@ -1881,7 +1881,7 @@ json_formats () ->
 formats() -> [ list, tagged, dict | json_formats() ].
 
 
-new_test_ () ->
+functional_interface_test_ () ->
   [
     ?_assertEqual (#lwes_event {name = "foo", attrs = []},
                    new (foo)),
@@ -1895,11 +1895,25 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_16,cat,50}]},
                    set_int16 (new(foo),cat,50)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_16_ARRAY,cat,
+                                         [1,0,-1]}]},
+                   set_int16_array (new(foo),cat,[1,0,-1])),
+    ?_assertError (badarg,
+                   set_int16_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_INT_16_ARRAY,cat,
+                                         [1,0,undefined]}]},
+                   set_nint16_array (new(foo),cat,
+                                     [1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nint16_array (new(foo),cat,a)),
     % INT16 bounds tests
     ?_assertError (badarg,
                    set_int16 (new(foo),cat,32768)),
     ?_assertError (badarg,
                    set_int16 (new(foo),cat,-32769)),
+
     % UINT16 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_16,cat,0}]},
@@ -1907,11 +1921,25 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_16,cat,5}]},
                    set_uint16 (new(foo),cat,5)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_16_ARRAY,cat,
+                                         [1,0,1]}]},
+                   set_uint16_array (new(foo),cat,[1,0,1])),
+    ?_assertError (badarg,
+                   set_uint16_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_U_INT_16_ARRAY,cat,
+                                         [1,0,undefined]}]},
+                   set_nuint16_array (new(foo),cat,
+                                     [1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nuint16_array (new(foo),cat,a)),
     % UINT16 bounds tests
     ?_assertError (badarg,
                    set_uint16 (new(foo),cat,-5)),
     ?_assertError (badarg,
                    set_uint16 (new(foo),cat,65536)),
+
     % INT32 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_32,cat,0}]},
@@ -1922,11 +1950,25 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_32,cat,50}]},
                    set_int32 (new(foo),cat,50)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_32_ARRAY,cat,
+                                         [1,0,-1]}]},
+                   set_int32_array (new(foo),cat,[1,0,-1])),
+    ?_assertError (badarg,
+                   set_int32_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_INT_32_ARRAY,cat,
+                                         [-1,0,undefined]}]},
+                   set_nint32_array (new(foo),cat,
+                                     [-1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nint32_array (new(foo),cat,a)),
     % INT32 bounds tests
     ?_assertError (badarg,
                    set_int32 (new(foo),cat,2147483648)),
     ?_assertError (badarg,
                    set_int32 (new(foo),cat,-2147483649)),
+
     % UINT32 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_32,cat,0}]},
@@ -1937,6 +1979,20 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_32,cat,4294967295}]},
                    set_uint32 (new(foo),cat,4294967295)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_32_ARRAY,cat,
+                                         [1,0,1]}]},
+                   set_uint32_array (new(foo),cat,[1,0,1])),
+    ?_assertError (badarg,
+                   set_uint32_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_U_INT_32_ARRAY,cat,
+                                         [1,0,undefined]}]},
+                   set_nuint32_array (new(foo),cat,
+                                     [1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nuint32_array (new(foo),cat,a)),
+
     % UINT32 bounds tests
     ?_assertError (badarg,
                    set_uint32 (new(foo),cat,-5)),
@@ -1955,11 +2011,25 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_INT_64,cat,9223372036854775807}]},
                    set_int64 (new(foo),cat,9223372036854775807)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_INT_64_ARRAY,cat,
+                                         [1,0,-1]}]},
+                   set_int64_array (new(foo),cat,[1,0,-1])),
+    ?_assertError (badarg,
+                   set_int64_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_INT_64_ARRAY,cat,
+                                         [-1,0,undefined]}]},
+                   set_nint64_array (new(foo),cat,
+                                     [-1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nint64_array (new(foo),cat,a)),
     % INT64 bounds tests
     ?_assertError (badarg,
                    set_int64 (new(foo),cat,9223372036854775808)),
     ?_assertError (badarg,
                    set_int64 (new(foo),cat,-9223372036854775809)),
+
     % UINT64 tests
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_64,cat,0}]},
@@ -1970,6 +2040,19 @@ new_test_ () ->
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_U_INT_64,cat,18446744073709551615}]},
                    set_uint64 (new(foo),cat,18446744073709551615)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_U_INT_64_ARRAY,cat,
+                                         [1,0,1]}]},
+                   set_uint64_array (new(foo),cat,[1,0,1])),
+    ?_assertError (badarg,
+                   set_uint64_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_U_INT_64_ARRAY,cat,
+                                         [1,0,undefined]}]},
+                   set_nuint64_array (new(foo),cat,
+                                     [1,0,undefined])),
+    ?_assertError (badarg,
+                   set_nuint64_array (new(foo),cat,a)),
     % UINT64 bounds tests
     ?_assertError (badarg,
                    set_uint64 (new(foo),cat,-5)),
@@ -1984,6 +2067,19 @@ new_test_ () ->
                    set_boolean (new(foo),cat,false)),
     ?_assertError (badarg,
                    set_boolean (new(foo),cat,kinda)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_BOOLEAN_ARRAY,cat,
+                                         [true,false,true]}]},
+                   set_boolean_array (new(foo),cat,[true,false,true])),
+    ?_assertError (badarg,
+                   set_boolean_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_BOOLEAN_ARRAY,cat,
+                                         [true,false,undefined]}]},
+                   set_nboolean_array (new(foo),cat,
+                                     [true,false,undefined])),
+    ?_assertError (badarg,
+                   set_nboolean_array (new(foo),cat,a)),
     % IP_ADDR test
     ?_assertEqual (#lwes_event{name = "foo",
                                attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
@@ -1995,7 +2091,103 @@ new_test_ () ->
                                attrs = [{?LWES_IP_ADDR,cat,{127,0,0,1}}]},
                    set_ip_addr (new(foo),cat,<<"127.0.0.1">>)),
     ?_assertError (badarg,
-                   set_ip_addr (new(foo),cat,"300.300.300.300"))
+                   set_ip_addr (new(foo),cat,"300.300.300.300")),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_IP_ADDR_ARRAY,cat,
+                                         [{127,0,0,1},{10,0,0,1},{25,26,27,28}]}]},
+                   set_ip_addr_array (new(foo),cat,
+                                      ["127.0.0.1","10.0.0.1","25.26.27.28"])),
+    ?_assertError (badarg,
+                   set_ip_addr_array (new(foo),cat,a)),
+
+    % STRING tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_STRING,cat,"true"}]},
+                   set_string (new(foo),cat,"true")),
+    ?_assertError (badarg,
+                   set_string (new(foo),cat,123)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_STRING_ARRAY,cat,
+                                         ["hello","world","!"]}]},
+                   set_string_array (new(foo),cat,["hello","world","!"])),
+    ?_assertError (badarg,
+                   set_string_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_STRING_ARRAY,cat,
+                                         ["hello","world",undefined]}]},
+                   set_nstring_array (new(foo),cat,
+                                     ["hello","world",undefined])),
+    ?_assertError (badarg,
+                   set_nstring_array (new(foo),cat,a)),
+    % LONG STRING tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_LONG_STRING,cat,<<"true">>}]},
+                   set_long_string (new(foo),cat,<<"true">>)),
+    ?_assertError (badarg,
+                   set_long_string (new(foo),cat,123)),
+    % BYTE tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_BYTE,cat,123}]},
+                   set_byte (new(foo),cat,123)),
+    ?_assertError (badarg,
+                   set_byte (new(foo),cat,300)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_BYTE_ARRAY,cat,
+                                         [5,1,6]}]},
+                   set_byte_array (new(foo),cat,[5,1,6])),
+    ?_assertError (badarg,
+                   set_byte_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_BYTE_ARRAY,cat,
+                                         [undefined,1,6]}]},
+                   set_nbyte_array (new(foo),cat,
+                                     [undefined,1,6])),
+    ?_assertError (badarg,
+                   set_nbyte_array (new(foo),cat,a)),
+    % FLOAT tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_FLOAT,cat,5.85253}]},
+                   set_float (new(foo),cat,5.85253)),
+    ?_assertError (badarg,
+                   set_float (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_FLOAT_ARRAY,cat,
+                                         [5.85253,1.23456,6.254335]}]},
+                   set_float_array (new(foo),cat,[5.85253,1.23456,6.254335])),
+    ?_assertError (badarg,
+                   set_float_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_N_FLOAT_ARRAY,cat,
+                                         [undefined,1.23456,6.254335]}]},
+                   set_nfloat_array (new(foo),cat,
+                                     [undefined,1.23456,6.254335])),
+    ?_assertError (badarg,
+                   set_nfloat_array (new(foo),cat,a)),
+    % DOUBLE tests
+    ?_assertEqual (#lwes_event{name = "foo",
+                               attrs = [{?LWES_DOUBLE,cat,5.85253}]},
+                   set_double (new(foo),cat,5.85253)),
+    ?_assertError (badarg,
+                   set_double (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{
+                      name = "foo",
+                      attrs = [{?LWES_DOUBLE_ARRAY,cat,
+                                [5.85253,1.23456,6.254335]}]},
+                   set_double_array (new(foo),cat,
+                                      [5.85253,1.23456,6.254335])),
+    ?_assertError (badarg,
+                   set_double_array (new(foo),cat,a)),
+    ?_assertEqual (#lwes_event{
+                      name = "foo",
+                      attrs = [{?LWES_N_DOUBLE_ARRAY,cat,
+                                [5.85253,undefined,6.254335]}]},
+                   set_ndouble_array (new(foo),cat,
+                                      [5.85253,undefined,6.254335])),
+    ?_assertError (badarg,
+                   set_ndouble_array (new(foo),cat,a))
+
+
+
   ].
 
 long_string_test_ () ->
@@ -2301,6 +2493,27 @@ check_headers_test_ () ->
                       tagged
                     ))
     end
+  ].
+
+% tests for odd case mostly just for coverage numbers
+coverage_test_ () ->
+  [
+    { "to_binary/1 passthrough",
+      ?_assertEqual (test_packet(binary), to_binary(test_packet(binary))) },
+    { "from_binary/1 empty binary",
+      ?_assertEqual (undefined, from_binary(<<>>)) },
+    { "from_udp_packet/2 with receipt time",
+      fun () ->
+        B = lwes_event:to_binary(lwes_event:new(foo)),
+        % if the second element of the udp tuple is a number and not
+        % a port, that number will be used for ReceiptTime
+        P = {udp, 5, {127,0,0,1}, 50, B},
+        E = #lwes_event{name = <<"foo">>,
+                        attrs = [{<<"SenderIP">>,{127,0,0,1}},
+                                 {<<"SenderPort">>,50},
+                                 {<<"ReceiptTime">>,5}]},
+        ?assertEqual (E, lwes_event:from_udp_packet (P, list))
+      end }
   ].
 
 type_inference_test_ () ->
