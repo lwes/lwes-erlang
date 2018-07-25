@@ -75,7 +75,7 @@
     {NotNullCount, BitsetLength, Bitset} = decode_bitset(AL, Rest),
     Count = NotNullCount * ElementSize,
     <<_:BitsetLength, Values:Count/bits, Rest2/binary>> = Rest,
-    { read_n_array (LwesType, AL, 1, Bitset ,Values, Format, []), Rest2 }).
+    { read_n_array (LwesType, AL, 1, Bitset ,Values, []), Rest2 }).
 
 %%====================================================================
 %% API
@@ -319,36 +319,9 @@ from_udp_packet ({ udp, Socket, SenderIP, SenderPort, Packet }, Format) ->
     case has_header_fields (Packet) of
       true -> [];
       false ->
-        case Format of
-          tagged ->
-            [ { ?LWES_IP_ADDR,  <<"SenderIP">>,   SenderIP },
-              { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-              { ?LWES_INT_64,   <<"ReceiptTime">>, ReceiptTime } ];
-          dict ->
-            dict:from_list (
-              [ { <<"SenderIP">>,   SenderIP },
-                { <<"SenderPort">>, SenderPort },
-                { <<"ReceiptTime">>, ReceiptTime } ]);
-          F when F =:= json;
-                 F =:= json_untyped;
-                 F =:= json_proplist;
-                 F =:= json_proplist_untyped;
-                 F =:= json_eep18;
-                 F =:= json_eep18_untyped  ->
-            [ { <<"SenderIP">>,   lwes_util:ip2bin (SenderIP) },
-              { <<"SenderPort">>, SenderPort },
-              { <<"ReceiptTime">>, ReceiptTime } ];
-          F when F =:= json_typed;
-                 F =:= json_proplist_typed;
-                 F =:= json_eep18_typed ->
-            [ { ?LWES_IP_ADDR, <<"SenderIP">>, lwes_util:ip2bin (SenderIP) },
-              { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
-              { ?LWES_INT_64, <<"ReceiptTime">>, ReceiptTime } ];
-          _ ->
-            [ { <<"SenderIP">>,   SenderIP },
-              { <<"SenderPort">>, SenderPort },
-              { <<"ReceiptTime">>, ReceiptTime } ]
-        end
+        [ { ?LWES_IP_ADDR,  <<"SenderIP">>,   SenderIP },
+          { ?LWES_U_INT_16, <<"SenderPort">>, SenderPort },
+          { ?LWES_INT_64,   <<"ReceiptTime">>, ReceiptTime } ]
     end,
   from_binary (Packet, Format, Extra).
 
@@ -357,8 +330,6 @@ from_binary (B) when is_binary (B) ->
 
 from_binary (<<>>, _) ->
   undefined;
-from_binary (Binary, dict) ->
-  from_binary (Binary, dict, dict:new());
 from_binary (Binary, Format) ->
   from_binary (Binary, Format, []).
 
@@ -367,54 +338,56 @@ from_binary (Binary, Format) ->
 %%====================================================================
 from_binary (Binary, Format, Accum0) ->
   { ok, EventName, Attrs } = read_name (Binary),
-  case Format of
-    json ->
-      AttrList = read_attrs (Attrs, json, Accum0),
-      {struct, [{<<"EventName">>, EventName} | AttrList ]};
-    json_untyped ->
-      AttrList = read_attrs (Attrs, json, Accum0),
-      {struct, [{<<"EventName">>, EventName} | AttrList]};
-    json_typed ->
-      AttrList = read_attrs (Attrs, json_typed, Accum0),
-      {struct,
-       [ {<<"EventName">>, EventName},
-         {<<"typed">>,
-          {struct, export_attributes(json_typed, AttrList)}
-         }
-       ]
-      };
-    json_proplist ->
-      AttrList = read_attrs (Attrs, json_proplist, Accum0),
-      [{<<"EventName">>, EventName} | AttrList ];
-    json_proplist_untyped ->
-      AttrList = read_attrs (Attrs, json_proplist, Accum0),
-      [{<<"EventName">>, EventName} | AttrList ];
-    json_proplist_typed ->
-      AttrList = read_attrs (Attrs, json_proplist_typed, Accum0),
-      [{<<"EventName">>, EventName},
-       {<<"typed">>, export_attributes(json_proplist_typed, AttrList)}
-      ];
-    json_eep18 ->
-      AttrList = read_attrs (Attrs, json_eep18, Accum0),
-      {[{<<"EventName">>, EventName} | AttrList ]};
-    json_eep18_untyped ->
-      AttrList = read_attrs (Attrs, json_eep18, Accum0),
-      {[{<<"EventName">>, EventName} | AttrList ]};
-    json_eep18_typed ->
-      AttrList = read_attrs (Attrs, json_eep18_typed, Accum0),
-      {[{<<"EventName">>, EventName},
-        {<<"typed">>, {export_attributes(json_eep18_typed, AttrList)}}
-       ]};
-    _ ->
-      AttrList = read_attrs (Attrs, Format, Accum0),
-      #lwes_event { name = EventName, attrs = AttrList }
+  AttrList = read_attrs (Attrs, Accum0),
+  case is_json_format (Format) of
+    true ->
+      BinaryAttrList = normalize_to_binary (AttrList),
+      Jsoned = jsonify (BinaryAttrList),
+      EEP18Json =
+        case is_typed_json (Format) of
+          true ->
+            {[{<<"EventName">>, EventName},
+              { <<"typed">>,
+                { add_types (Jsoned) }
+              }
+             ]
+            };
+          false ->
+            {[{<<"EventName">>, EventName} |
+              remove_types (Jsoned)
+             ]}
+        end,
+        eep18_convert_to (EEP18Json, json_format_to_structure (Format));
+    false ->
+      case Format of
+        list ->
+          #lwes_event { name = EventName,
+                        attrs = remove_types (AttrList) };
+        dict ->
+          #lwes_event { name = EventName,
+                        attrs = dict:from_list (remove_types(AttrList)) };
+        tagged ->
+          #lwes_event { name = EventName,
+                        attrs = AttrList }
+      end
   end.
 
-split_bounds(Index, Bitset) ->
-  Size = size(Bitset) * 8,
-  L = Size - Index,
-  R = Index - 1,
-  {L, R}.
+normalize_to_binary (Attrs) ->
+  [ {T, K, make_binary(T, V)} || {T, K, V} <- Attrs ].
+
+add_types (Attrs) ->
+  lists:foldl (
+    fun ({Type, Key, Value}, A) ->
+      [ { Key, {[{<<"type">>, Type},{<<"value">>, make_binary (Type, Value)}]} } | A ]
+    end,
+    [],
+    Attrs).
+
+remove_types (L) when is_list(L) ->
+  [ {K, V} || {_, K, V} <- L ].
+
+jsonify (L) when is_list(L) ->
+  [ {Type, K, decode_json (Type, V) } || {Type, K, V} <- L ].
 
 lwes_bitset_rep (Len, Bitset) ->
   Padding = (erlang:byte_size(Bitset) * 8) - Len,
@@ -831,201 +804,176 @@ read_name (<<Length:8/integer-unsigned-big,
 read_name (_) ->
   { error, malformed_event }.
 
-read_attrs (<<>>, _Format, Accum) ->
+read_attrs (<<>>, Accum) ->
   Accum;
-read_attrs (Bin, Format, Accum) ->
+read_attrs (Bin, Accum) ->
   <<L:8/integer-unsigned-big, K:L/binary,
     T:8/integer-unsigned-big, Vals/binary>> = Bin,
-  { V, Rest } = read_value (T, Vals, Format),
-  read_attrs (Rest, Format,
-               case Format of
-                 dict ->
-                   dict:store (K, V, Accum);
-                 tagged ->
-                   [ {type_to_atom (T), K, V} | Accum ];
-                 F when F=:= json; F =:= json_untyped ->
-                   [ {K, value_from_json (Format, V) }
-                     | Accum ];
-                 json_typed ->
-                   [ {type_to_atom(T), K, value_from_json (Format, V) }
-                     | Accum ];
-                 F when F =:= json_proplist; F =:= json_proplist_untyped ->
-                   [ {K, value_from_json (Format, V) }
-                     | Accum ];
-                 json_proplist_typed ->
-                   [ {type_to_atom(T), K, value_from_json (Format, V) }
-                     | Accum ];
-                 F when F =:= json_eep18; F =:= json_eep18_untyped ->
-                   [ {K, value_from_json (Format, V) }
-                     | Accum ];
-                 json_eep18_typed ->
-                   [ {type_to_atom(T), K, value_from_json (Format, V) }
-                     | Accum ];
-                 _ ->
-                   [ {K, V} | Accum ]
-               end).
+  { V, Rest } = read_value (T, Vals),
+  read_attrs (Rest, [ {type_to_atom(T), K, V} | Accum ]).
 
-read_value (?LWES_TYPE_U_INT_16, Bin, _Format) ->
+read_value (?LWES_TYPE_U_INT_16, Bin) ->
   <<V:16/integer-unsigned-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_INT_16, Bin, _Format) ->
+read_value (?LWES_TYPE_INT_16, Bin) ->
   <<V:16/integer-signed-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_U_INT_32, Bin, _Format) ->
+read_value (?LWES_TYPE_U_INT_32, Bin) ->
   <<V:32/integer-unsigned-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_INT_32, Bin, _Format) ->
+read_value (?LWES_TYPE_INT_32, Bin) ->
   <<V:32/integer-signed-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_U_INT_64, Bin, _Format) ->
+read_value (?LWES_TYPE_U_INT_64, Bin) ->
   <<V:64/integer-unsigned-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_INT_64, Bin, _Format) ->
+read_value (?LWES_TYPE_INT_64, Bin) ->
   <<V:64/integer-signed-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_IP_ADDR, Bin, Format)
-  when Format =:= json; Format =:= json_proplist; Format =:= json_eep18  ->
-  <<V1:8/integer-unsigned-big,
-    V2:8/integer-unsigned-big,
-    V3:8/integer-unsigned-big,
-    V4:8/integer-unsigned-big, Rest/binary>> = Bin,
-  { lwes_util:ip2bin ({V4,V3,V2,V1}), Rest };
-read_value (?LWES_TYPE_IP_ADDR, Bin, _Format) ->
+read_value (?LWES_TYPE_IP_ADDR, Bin) ->
   <<V1:8/integer-unsigned-big,
     V2:8/integer-unsigned-big,
     V3:8/integer-unsigned-big,
     V4:8/integer-unsigned-big, Rest/binary>> = Bin,
   { {V4, V3, V2, V1}, Rest };
-read_value (?LWES_TYPE_BOOLEAN, Bin, _Format) ->
+read_value (?LWES_TYPE_BOOLEAN, Bin) ->
   <<V:8/integer-unsigned-big, Rest/binary>> = Bin,
   { case V of 0 -> false; _ -> true end, Rest };
-read_value (?LWES_TYPE_STRING, Bin, _Format) ->
+read_value (?LWES_TYPE_STRING, Bin) ->
   <<SL:16/integer-unsigned-big, V:SL/binary, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_BYTE, Bin, _Format) ->
+read_value (?LWES_TYPE_BYTE, Bin) ->
   <<V:8/integer-unsigned-big, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_FLOAT, Bin, _Format) ->
+read_value (?LWES_TYPE_FLOAT, Bin) ->
   <<V:32/float, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_DOUBLE, Bin, _Format) ->
+read_value (?LWES_TYPE_DOUBLE, Bin) ->
   <<V:64/float, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_LONG_STRING, Bin, _Format) ->
+read_value (?LWES_TYPE_LONG_STRING, Bin) ->
   <<BL:32/integer-unsigned-big, V:BL/binary, Rest/binary>> = Bin,
   { V, Rest };
-read_value (?LWES_TYPE_U_INT_16_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_U_INT_16_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*16,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_U_INT_16, Ints, Format, []), Rest2 };
-read_value (?LWES_TYPE_INT_16_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_U_INT_16, Ints, []), Rest2 };
+read_value (?LWES_TYPE_INT_16_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*16,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_INT_16, Ints, Format, []), Rest2 };
-read_value (?LWES_TYPE_U_INT_32_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_INT_16, Ints, []), Rest2 };
+read_value (?LWES_TYPE_U_INT_32_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*32,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_U_INT_32, Ints, Format, []), Rest2 };
-read_value (?LWES_TYPE_INT_32_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_U_INT_32, Ints, []), Rest2 };
+read_value (?LWES_TYPE_INT_32_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*32,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_INT_32, Ints, Format,  []), Rest2 };
-read_value (?LWES_TYPE_U_INT_64_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_INT_32, Ints,  []), Rest2 };
+read_value (?LWES_TYPE_U_INT_64_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*64,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_U_INT_64, Ints, Format, []), Rest2 };
-read_value (?LWES_TYPE_INT_64_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_U_INT_64, Ints, []), Rest2 };
+read_value (?LWES_TYPE_INT_64_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*64,
   <<Ints:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_INT_64, Ints, Format, []), Rest2 };
-read_value (?LWES_TYPE_IP_ADDR_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_INT_64, Ints, []), Rest2 };
+read_value (?LWES_TYPE_IP_ADDR_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*4,
   <<Ips:Count/binary, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_IP_ADDR, Ips, Format, []), Rest2 };
-read_value (?LWES_TYPE_BOOLEAN_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_IP_ADDR, Ips, []), Rest2 };
+read_value (?LWES_TYPE_BOOLEAN_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*1,
   <<Bools:Count/binary, Rest2/binary>> =  Rest,
-  { read_array (?LWES_TYPE_BOOLEAN, Bools, Format, []), Rest2 };
-read_value (?LWES_TYPE_STRING_ARRAY, Bin, _Format) ->
+  { read_array (?LWES_TYPE_BOOLEAN, Bools, []), Rest2 };
+read_value (?LWES_TYPE_STRING_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   read_string_array (AL, Rest, []);
-read_value (?LWES_TYPE_BYTE_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_BYTE_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   <<Bytes:AL/binary, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_BYTE, Bytes, Format, []), Rest2 };
-read_value (?LWES_TYPE_FLOAT_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_BYTE, Bytes, []), Rest2 };
+read_value (?LWES_TYPE_FLOAT_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*32,
   <<Floats:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_FLOAT, Floats, Format, []), Rest2 };
-read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_FLOAT, Floats, []), Rest2 };
+read_value (?LWES_TYPE_DOUBLE_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, Rest/binary>> = Bin,
   Count = AL*64,
   <<Doubles:Count/bits, Rest2/binary>> = Rest,
-  { read_array (?LWES_TYPE_DOUBLE, Doubles, Format, []), Rest2 };
-read_value (?LWES_TYPE_N_U_INT_16_ARRAY, Bin, Format) ->
+  { read_array (?LWES_TYPE_DOUBLE, Doubles, []), Rest2 };
+read_value (?LWES_TYPE_N_U_INT_16_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_16, 16);
-read_value (?LWES_TYPE_N_INT_16_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_INT_16_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_INT_16, 16);
-read_value (?LWES_TYPE_N_U_INT_32_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_U_INT_32_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_32, 32);
-read_value (?LWES_TYPE_N_INT_32_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_INT_32_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_INT_32, 32);
-read_value (?LWES_TYPE_N_U_INT_64_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_U_INT_64_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_U_INT_64, 64);
-read_value (?LWES_TYPE_N_INT_64_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_INT_64_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_INT_64, 64);
-read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_BOOLEAN_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_BOOLEAN, 8);
-read_value (?LWES_TYPE_N_STRING_ARRAY, Bin, _) ->
+read_value (?LWES_TYPE_N_STRING_ARRAY, Bin) ->
   <<AL:16/integer-unsigned-big, _:16, Rest/binary>> = Bin,
-  {_, Bitset_Length, Bitset} = decode_bitset(AL, Rest),
+  {_, Bitset_Length, Bitset} = decode_bitset(AL,Rest),
   <<_:Bitset_Length, Rest2/binary>> = Rest,
   read_n_string_array (AL, 1, Bitset, Rest2, []);
-read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_BYTE_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_BYTE, 8);
-read_value (?LWES_TYPE_N_FLOAT_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_FLOAT_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_FLOAT, 32);
-read_value (?LWES_TYPE_N_DOUBLE_ARRAY, Bin, Format) ->
+read_value (?LWES_TYPE_N_DOUBLE_ARRAY, Bin) ->
   ?read_nullable_array(Bin, ?LWES_TYPE_DOUBLE, 64);
-read_value (_, _, _) ->
+read_value (_, _) ->
   throw (unknown_type).
 
 
 %% ARRAY TYPE FUNCS
-read_array (_Type, <<>>, _Format, Acc) -> lists:reverse (Acc);
-read_array (Type, Bin, Format, Acc) ->
-  { V, Rest } = read_value (Type, Bin, Format),
-  read_array (Type, Rest, Format, [V] ++ Acc).
+split_bounds(Index, Bitset) ->
+  Size = size(Bitset) * 8,
+  L = Size - Index,
+  R = Index - 1,
+  {L, R}.
 
-read_n_array (_Type, Count, Index, _Bitset, _Bin, _Format, Acc) when Index > Count -> lists:reverse (Acc);
-read_n_array (Type, Count, Index, Bitset, Bin, Format, Acc) when Index =< Count ->
+read_array (_Type, <<>>, Acc) -> lists:reverse (Acc);
+read_array (Type, Bin, Acc) ->
+  { V, Rest } = read_value (Type, Bin),
+  read_array (Type, Rest, [V] ++ Acc).
+
+read_n_array (_Type, Count, Index, _Bitset, _Bin, Acc) when Index > Count ->
+  lists:reverse (Acc);
+read_n_array (Type, Count, Index, Bitset, Bin, Acc) when Index =< Count ->
   {L, R} = split_bounds(Index, Bitset),
   << _:L/bits, X:1, _:R/bits >> = Bitset,
   { V, Rest } = case X of 0 -> {undefined, Bin};
-                          1 -> read_value (Type, Bin, Format)
+                          1 -> read_value (Type, Bin)
                 end,
-  read_n_array (Type, Count, Index + 1, Bitset, Rest, Format, [V] ++ Acc).
+  read_n_array (Type, Count, Index + 1, Bitset, Rest, [V] ++ Acc).
 
 read_string_array (0, Bin, Acc) -> { lists:reverse (Acc), Bin };
 read_string_array (Count, Bin, Acc) ->
-  { V, Rest } = read_value (?LWES_TYPE_STRING, Bin, undefined),
+  { V, Rest } = read_value (?LWES_TYPE_STRING, Bin),
   read_string_array (Count-1, Rest, [V] ++ Acc).
 
-read_n_string_array (Count, Index, _Bitset, Bin, Acc) when Index > Count -> { lists:reverse (Acc), Bin };
+read_n_string_array (Count, Index, _Bitset, Bin, Acc) when Index > Count ->
+  { lists:reverse (Acc), Bin };
 read_n_string_array (Count, Index, Bitset, Bin, Acc) when Index =< Count ->
   {L, R} = split_bounds(Index, Bitset),
   << _:L/bits, X:1, _:R/bits >> = Bitset,
   { V, Rest } = case X of 0 -> {undefined, Bin};
-                          1 -> read_value (?LWES_TYPE_STRING, Bin, undefined)
+                          1 -> read_value (?LWES_TYPE_STRING, Bin)
                 end,
   read_n_string_array (Count, Index + 1,Bitset, Rest, [V] ++ Acc).
 
@@ -1054,30 +1002,6 @@ to_json (Bin, Format) when is_binary (Bin) ->
 to_json (Event, Format) ->
   from_binary (to_binary (Event), Format).
 
-export_attribute (Format, {Key, Value}) ->
-  Type = infer_type (Value),
-  export_attribute (Format, {Type, Key, Value});
-export_attribute (json_typed, {Type, _, Value}) ->
-  {struct, [ {<<"type">>, Type},
-             {<<"value">>, make_binary (Type, Value)} ] };
-export_attribute (json_proplist_typed, {Type, _, Value}) ->
-  [{<<"type">>, Type},
-   {<<"value">>, make_binary (Type, Value)}];
-export_attribute (json_eep18_typed, {Type, _, Value}) ->
-  {[{<<"type">>, Type},
-    {<<"value">>, make_binary (Type, Value)}]}.
-
-export_attributes(Format, Attrs) ->
-  lists:foldl (
-    fun
-      (E = {Key, _}, A) ->
-        [ {Key, export_attribute (Format, E)} | A];
-      (E = {_, Key, _}, A) ->
-        [ {Key, export_attribute (Format, E)} | A]
-    end,
-    [],
-    Attrs).
-
 from_json(Bin) when is_list(Bin); is_binary(Bin) ->
   from_json (lwes_mochijson2:decode (Bin, [{format, eep18}]));
 from_json ({Json}) ->
@@ -1094,33 +1018,46 @@ make_binary(Type, Value) ->
     false -> lwes_util:any_to_binary(Value)
   end.
 
-value_from_json (Format, Value)
-  when Format =:= json;
-       Format =:= json_untyped;
-       Format =:= json_typed ->
-  try lwes_mochijson2:decode (Value, [{format, struct}]) of
-    S -> S
-  catch
-    _:_ -> Value
-  end;
-value_from_json (Format, Value)
-  when Format =:= json_proplist;
-       Format =:= json_proplist_untyped;
-       Format =:= json_proplist_typed ->
-  try lwes_mochijson2:decode (Value, [{format, proplist}]) of
-    S -> S
-  catch
-    _:_ -> Value
-  end;
-value_from_json (Format, Value)
-  when Format =:= json_eep18;
-       Format =:= json_eep18_untyped;
-       Format =:= json_eep18_typed ->
+decode_json (Type, Value) ->
+  Decoded =
+    case is_arr_type (Type) of
+      true ->
+        [ decode_json_one (V) || V <- Value ];
+      false ->
+        decode_json_one (Value)
+    end,
+  Decoded.
+
+decode_json_one (Value) ->
   try lwes_mochijson2:decode (Value, [{format, eep18}]) of
     S -> S
   catch
     _:_ -> Value
   end.
+
+eep18_convert_to (Json, eep18) ->
+  Json;
+eep18_convert_to (Json, struct) ->
+  eep18_to_struct (Json);
+eep18_convert_to (Json, proplist) ->
+  eep18_to_proplist (Json).
+
+eep18_to_struct ({L}) when is_list(L) ->
+  {struct, eep18_to_struct(L)};
+eep18_to_struct (L) when is_list(L) ->
+  [ eep18_to_struct (E) || E <- L ];
+eep18_to_struct ({K,V}) ->
+  {K, eep18_to_struct (V)};
+eep18_to_struct (O) -> O.
+
+eep18_to_proplist ({L}) when is_list(L) ->
+  eep18_to_proplist(L);
+eep18_to_proplist (L) when is_list(L) ->
+  [ eep18_to_proplist (E) || E <- L ];
+eep18_to_proplist ({K,V}) ->
+  {K, eep18_to_proplist (V)};
+eep18_to_proplist (O) -> O.
+
 
 process_one ({Key, {Attrs}}) ->
   Type = case proplists:get_value (<<"type">>, Attrs) of
@@ -1169,20 +1106,56 @@ process_one ({Key, {Attrs}}) ->
     end,
   { Type, Key, NewValue }.
 
-is_arr_type (T) ->
-    T == ?LWES_U_INT_16_ARRAY orelse T == ?LWES_N_U_INT_16_ARRAY orelse
-    T == ?LWES_INT_16_ARRAY orelse T == ?LWES_N_INT_16_ARRAY orelse
-    T == ?LWES_U_INT_32_ARRAY orelse T == ?LWES_N_U_INT_32_ARRAY orelse
-    T == ?LWES_INT_32_ARRAY orelse T == ?LWES_N_INT_32_ARRAY orelse
-    T == ?LWES_INT_64_ARRAY orelse T == ?LWES_N_INT_64_ARRAY orelse
-    T == ?LWES_U_INT_64_ARRAY orelse T == ?LWES_N_U_INT_64_ARRAY orelse
-    T == ?LWES_STRING_ARRAY orelse T == ?LWES_N_STRING_ARRAY orelse
-    T == ?LWES_IP_ADDR_ARRAY orelse
-    T == ?LWES_BOOLEAN_ARRAY orelse T == ?LWES_N_BOOLEAN_ARRAY orelse
-    T == ?LWES_BYTE_ARRAY orelse T == ?LWES_N_BYTE_ARRAY orelse
-    T == ?LWES_FLOAT_ARRAY orelse T == ?LWES_N_FLOAT_ARRAY orelse
-    T == ?LWES_DOUBLE_ARRAY orelse T == ?LWES_N_DOUBLE_ARRAY.
+is_json_format (json) -> true;
+is_json_format (json_untyped) -> true;
+is_json_format (json_typed) -> true;
+is_json_format (json_proplist) -> true;
+is_json_format (json_proplist_untyped) -> true;
+is_json_format (json_proplist_typed) -> true;
+is_json_format (json_eep18) -> true;
+is_json_format (json_eep18_untyped) -> true;
+is_json_format (json_eep18_typed) -> true;
+is_json_format (_) -> false.
 
+json_format_to_structure (json) -> struct;
+json_format_to_structure (json_untyped) -> struct;
+json_format_to_structure (json_typed) -> struct;
+json_format_to_structure (json_proplist) -> proplist;
+json_format_to_structure (json_proplist_untyped) -> proplist;
+json_format_to_structure (json_proplist_typed) -> proplist;
+json_format_to_structure (json_eep18) -> eep18;
+json_format_to_structure (json_eep18_untyped) -> eep18;
+json_format_to_structure (json_eep18_typed) -> eep18.
+
+is_typed_json (json_typed) -> true;
+is_typed_json (json_proplist_typed) -> true;
+is_typed_json (json_eep18_typed) -> true;
+is_typed_json (_) -> false.
+
+is_arr_type (?LWES_U_INT_16_ARRAY) -> true;
+is_arr_type (?LWES_N_U_INT_16_ARRAY) -> true;
+is_arr_type (?LWES_INT_16_ARRAY) -> true;
+is_arr_type (?LWES_N_INT_16_ARRAY) -> true;
+is_arr_type (?LWES_U_INT_32_ARRAY) -> true;
+is_arr_type (?LWES_N_U_INT_32_ARRAY) -> true;
+is_arr_type (?LWES_INT_32_ARRAY) -> true;
+is_arr_type (?LWES_N_INT_32_ARRAY) -> true;
+is_arr_type (?LWES_INT_64_ARRAY) -> true;
+is_arr_type (?LWES_N_INT_64_ARRAY) -> true;
+is_arr_type (?LWES_U_INT_64_ARRAY) -> true;
+is_arr_type (?LWES_N_U_INT_64_ARRAY) -> true;
+is_arr_type (?LWES_STRING_ARRAY) -> true;
+is_arr_type (?LWES_N_STRING_ARRAY) -> true;
+is_arr_type (?LWES_IP_ADDR_ARRAY) -> true;
+is_arr_type (?LWES_BOOLEAN_ARRAY) -> true;
+is_arr_type (?LWES_N_BOOLEAN_ARRAY) -> true;
+is_arr_type (?LWES_BYTE_ARRAY) -> true;
+is_arr_type (?LWES_N_BYTE_ARRAY) -> true;
+is_arr_type (?LWES_FLOAT_ARRAY) -> true;
+is_arr_type (?LWES_N_FLOAT_ARRAY) -> true;
+is_arr_type (?LWES_DOUBLE_ARRAY) -> true;
+is_arr_type (?LWES_N_DOUBLE_ARRAY) -> true;
+is_arr_type (_) -> false.
 
 %%====================================================================
 %% Test functions
@@ -2040,7 +2013,7 @@ write_read_nullarrays_test_() ->
   [ fun () ->
       W = write(Type, Arr),
       <<_:8/bits, Data/binary>> = W,
-      ?assertEqual ({Arr, <<>>}, read_value(Type_Id, Data, 0))
+      ?assertEqual ({Arr, <<>>}, read_value(Type_Id, Data))
     end
     || {Type, Type_Id, Arr}
     <- [
@@ -2065,7 +2038,7 @@ string_nullable_arrays_test_ () ->
 
     ?_assertEqual({[undefined, <<"test">>, <<"should ">>, <<"pass">>], <<>>},
                   read_value(?LWES_TYPE_N_STRING_ARRAY,
-                    <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>, 0))
+                    <<0,4,0,4,14,0,4,"test",0,7,"should ",0,4,"pass">>))
   ].
 
 serialize_test_ () ->
@@ -2096,22 +2069,42 @@ deserialize_test_ () ->
     end,
     fun (Packet) ->
       [
-        % peek name check
-        ?_assertEqual (<<"Test">>, peek_name_from_udp (Packet)),
-        % peek name failure
-        fun () ->
-          {ok, Port} = gen_udp:open(0,[binary]),
-          ?assertEqual ({error, malformed_event},
-                        peek_name_from_udp ({udp, Port,
-                                             {192,168,54,1}, 58206,
-                                             <<4,84,101,115>>})),
-          gen_udp:close(Port)
-        end
+        { "peek name check",
+          ?_assertEqual (<<"Test">>, peek_name_from_udp (Packet))
+        },
+        { "peek name failure",
+          fun () ->
+            {ok, Port} = gen_udp:open(0,[binary]),
+            ?assertEqual ({error, malformed_event},
+                          peek_name_from_udp ({udp, Port,
+                                               {192,168,54,1}, 58206,
+                                               <<4,84,101,115>>})),
+            gen_udp:close(Port)
+          end
+        },
+        { "serialize dict",
+          fun() ->
+            % need to normalize dict's otherwise they fail to compare equal
+            EIn = #lwes_event { attrs = DictIn } =
+              remove_attr (<<"ReceiptTime">>, test_packet (dict)),
+            EInSorted =
+              EIn#lwes_event {
+                attrs = dict:from_list(lists:sort(dict:to_list(DictIn))) },
+            EOut = #lwes_event { attrs = DictOut } =
+              remove_attr (<<"ReceiptTime">>, from_udp_packet(Packet, dict)),
+            EOutSorted =
+              EOut#lwes_event {
+                attrs = dict:from_list(lists:sort(dict:to_list(DictOut))) },
+            ?assertEqual (EOutSorted, EInSorted)
+          end
+        }
         | [
-            ?_assertEqual (
-              remove_attr (<<"ReceiptTime">>, from_udp_packet(Packet, Format)),
-              remove_attr (<<"ReceiptTime">>, test_packet (Format))
-            ) || Format <- formats()
+            { lists:flatten(io_lib:format("serialize ~p",[Format])),
+              ?_assertEqual (
+                remove_attr (<<"ReceiptTime">>, from_udp_packet(Packet, Format)),
+                remove_attr (<<"ReceiptTime">>, test_packet (Format))
+              )
+            } || Format <- formats(), Format =/= dict
           ]
       ]
     end
@@ -2119,30 +2112,58 @@ deserialize_test_ () ->
 
 nested_json_test_ () ->
   [
-    ?_assertEqual (to_binary(nested_event(event)), nested_event(binary)),
+   { "event -> binary", ?_assertEqual (to_binary(nested_event(event)), nested_event(binary)) },
     % check that all untyped types encode to the same json structure
+   { "json -> untyped",
+      ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
+                     lwes_mochijson2:encode(nested_event(json_untyped))) },
+   { "json -> proplist",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
-                   lwes_mochijson2:encode(nested_event(json_untyped))),
+                   lwes_mochijson2:encode(nested_event(json_proplist))) },
+   { "json -> proplist_untyped",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
-                   lwes_mochijson2:encode(nested_event(json_proplist))),
+                   lwes_mochijson2:encode(nested_event(json_proplist_untyped)))},
+   { "json -> eep18",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
-                   lwes_mochijson2:encode(nested_event(json_proplist_untyped))),
+                   lwes_mochijson2:encode(nested_event(json_eep18))) },
+   { "json -> eep18_untyped",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
-                   lwes_mochijson2:encode(nested_event(json_eep18))),
-    ?_assertEqual (lwes_mochijson2:encode(nested_event(json)),
-                   lwes_mochijson2:encode(nested_event(json_eep18_untyped))),
+                   lwes_mochijson2:encode(nested_event(json_eep18_untyped))) },
     % check that all typed typed encode to the same json structure
+   { "json_typed -> proplist_typed",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json_typed)),
-                   lwes_mochijson2:encode(nested_event(json_proplist_typed))),
+                   lwes_mochijson2:encode(nested_event(json_proplist_typed)))},
+   { "json_typed -> eep18_typed",
     ?_assertEqual (lwes_mochijson2:encode(nested_event(json_typed)),
-                   lwes_mochijson2:encode(nested_event(json_eep18_typed)))
+                   lwes_mochijson2:encode(nested_event(json_eep18_typed)))}
     | [
-        ?_assertEqual (to_json(nested_event(binary), Format),
-                       nested_event (Format))
+        { lists:flatten(io_lib:format("~p -> ~p",[Format,Format])),
+          ?_assertEqual (to_json(nested_event(binary), Format),
+                                 nested_event (Format)) }
         || Format
         <- json_formats()
       ]
   ].
+
+% had a bug with arrays in json sometimes being misinterpreted, the first
+% test was a failing test and other may be added if additional issues
+% are found
+arrays_in_json_test_ () ->
+  [
+    ?_assertEqual(
+       {[{<<"EventName">>,<<"Foo::Bar">>},
+         {<<"typed">>,
+          {[{<<"cat">>,
+            {[{<<"type">>,?LWES_N_STRING_ARRAY},
+              {<<"value">>,[<<"4458534">>,<<>>,<<"29681110">>]}]}}]}}]
+       },
+       lwes_event:to_json(
+         #lwes_event { name = <<"Foo::Bar">>,
+                       attrs = [{?LWES_N_STRING_ARRAY,<<"cat">>,
+                                 [<<"4458534">>,<<"">>,<<"29681110">>]}]})
+     )
+  ].
+
 
 from_json_test () ->
   #lwes_event{name=_,attrs=AttributesFromJson} = from_json(test_text()),

@@ -62,6 +62,8 @@
 -define (LWES_TYPE_N_U_INT_32_ARRAY,  143).
 -define (LWES_TYPE_N_INT_32_ARRAY,    144).
 -define (LWES_TYPE_N_STRING_ARRAY,    145).
+% TODO: this is not implemented
+% -define (LWES_TYPE_N_IP_ADDR_ARRAY,   146).
 -define (LWES_TYPE_N_INT_64_ARRAY,    147).
 -define (LWES_TYPE_N_U_INT_64_ARRAY,  148).
 -define (LWES_TYPE_N_BOOLEAN_ARRAY,   149).
