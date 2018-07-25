@@ -459,107 +459,149 @@ write_attrs ([], Accum) ->
   Accum;
 write_attrs ([{T,K,V} | Rest], Accum) ->
   write_attrs (Rest, [ write_key (K), write (T, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_int16 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_INT_16, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_uint16 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_U_INT_16, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_int32 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_INT_32, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_uint32 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_U_INT_32, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_int64 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_INT_64, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when ?is_uint64 (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_U_INT_64, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when is_boolean (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_BOOLEAN, V) | Accum ]);
-write_attrs ([{K,V} | Rest], Accum) when is_atom (V); is_binary (V) ->
+write_attrs ([{K,V} | Rest], Accum) ->
+  write_attrs (Rest, [ write_key (K), write (infer_type(V), V) | Accum ]).
+
+%
+% In the case where untyped values are being passed to lwes_event to
+% encode, we will need to infer types from untyped values.  In doing this
+% integers will be packed into the smallest encoding type, so the first
+% part of this functions breaks the integer ranges up according to
+% the boundaries of the different types.
+%
+% Lists are then inspected and if the list is an iolist it will be treated
+% as a string type, otherwise lists become lwes lists and can either be
+% nullable if an undefined is found, or just a typed list if undefined
+% is not found.
+%
+% Caveats:
+% - using untyped lwes will result in more processing occuring as
+%   the entire structure must be scanned before a type is inferred.
+% - string arrays are mostly indistinguishable from strings, with
+%   the exception of string arrays with atoms in them, so use the 3-tuple
+%   form if you want string arrays
+% - byte arrays are indistinguishable from string, so use the 3-tuple
+%   form if you want byte arrays
+% - all float types are assumed to be doubles
+infer_type (V) when is_integer(V) ->
   case V of
-    A when is_atom (A) ->
-       write_attrs (Rest, [ write_key (K), write (?LWES_STRING, V) | Accum ]);
-    _ ->
-       case iolist_size (V) of
-         SL when SL >= 0, SL =< 65535 ->
-           write_attrs (Rest, [ write_key (K), write (?LWES_STRING, SL, V) | Accum ]);
-         SL when SL=< 4294967295 ->
-           write_attrs (Rest, [ write_key (K), write (?LWES_LONG_STRING, SL, V) | Accum ]);
-         _ -> throw (string_too_big)
-       end
+    _ when V < -9223372036854775808 -> erlang:error(badarg);
+    _ when V >= -9223372036854775808, V < -2147483648 -> ?LWES_INT_64;
+    _ when V < -32768 -> ?LWES_INT_32;
+    _ when V < 0 -> ?LWES_INT_16;
+    _ when V =< 255 -> ?LWES_BYTE;
+    _ when V =< 32767 -> ?LWES_INT_16;
+    _ when V =< 65535 -> ?LWES_U_INT_16;
+    _ when V =< 2147483647 -> ?LWES_INT_32;
+    _ when V =< 4294967295 -> ?LWES_U_INT_32;
+    _ when V =< 9223372036854775807 -> ?LWES_INT_64;
+    _ when V =< 18446744073709551615 -> ?LWES_U_INT_64;
+    _ -> erlang:error(badarg)
   end;
-write_attrs ([{K,V} | Rest], Accum) when is_list (V) ->
-  write_attrs (Rest, [ write_key (K), write (type_array (V), V) | Accum ]);
-write_attrs ([{K,V = {_,_,_,_}} | Rest], Accum) when ?is_ip_addr (V) ->
-  write_attrs (Rest, [ write_key (K), write (?LWES_IP_ADDR, V) | Accum ]).
+infer_type (V) when is_boolean(V) -> ?LWES_BOOLEAN;
+infer_type (V) when ?is_ip_addr(V) -> ?LWES_IP_ADDR;
+infer_type (V) when is_float(V) -> ?LWES_DOUBLE;
+infer_type (V) when is_atom(V) -> ?LWES_STRING;
+infer_type (V) when is_binary(V) ->
+  case iolist_size (V) of
+    SL when SL >= 0, SL =< 65535 -> ?LWES_STRING;
+    SL when SL=< 4294967295 -> ?LWES_LONG_STRING;
+    _ -> erlang:error(badarg)
+  end;
+infer_type (V) when is_list(V) ->
+ case is_iolist(V) of
+  true ->
+    case iolist_size (V) of
+      SL when SL >= 0, SL =< 65535 -> ?LWES_STRING;
+      SL when SL=< 4294967295 -> ?LWES_LONG_STRING;
+      _ -> erlang:error(badarg)
+    end;
+  false -> infer_type(infer_array_type (V))
+ end;
+infer_type ({undefined,  ?LWES_U_INT_16}) -> ?LWES_U_INT_16_ARRAY;
+infer_type ({undefined,  ?LWES_INT_16})   -> ?LWES_INT_16_ARRAY;
+infer_type ({undefined,  ?LWES_U_INT_32}) -> ?LWES_U_INT_32_ARRAY;
+infer_type ({undefined,  ?LWES_INT_32})   -> ?LWES_INT_32_ARRAY;
+infer_type ({undefined,  ?LWES_U_INT_64}) -> ?LWES_U_INT_64_ARRAY;
+infer_type ({undefined,  ?LWES_INT_64})   -> ?LWES_INT_64_ARRAY;
+infer_type ({undefined,  ?LWES_STRING})   -> ?LWES_STRING_ARRAY;
+infer_type ({undefined,  ?LWES_BOOLEAN})  -> ?LWES_BOOLEAN_ARRAY;
+infer_type ({undefined,  ?LWES_IP_ADDR})  -> ?LWES_IP_ADDR_ARRAY;
+% BYTE arrays can't actually be detected as they show up as strings
+% infer_type ({undefined,  ?LWES_BYTE})     -> ?LWES_BYTE_ARRAY;
+% FLOAT arrays will be detected as doubles
+% infer_type ({undefined,  ?LWES_FLOAT})    -> ?LWES_FLOAT_ARRAY;
+infer_type ({undefined,  ?LWES_DOUBLE})   -> ?LWES_DOUBLE_ARRAY;
+infer_type ({nullable,  ?LWES_U_INT_16}) -> ?LWES_N_U_INT_16_ARRAY;
+infer_type ({nullable,  ?LWES_INT_16})   -> ?LWES_N_INT_16_ARRAY;
+infer_type ({nullable,  ?LWES_U_INT_32}) -> ?LWES_N_U_INT_32_ARRAY;
+infer_type ({nullable,  ?LWES_INT_32})   -> ?LWES_N_INT_32_ARRAY;
+infer_type ({nullable,  ?LWES_U_INT_64}) -> ?LWES_N_U_INT_64_ARRAY;
+infer_type ({nullable,  ?LWES_INT_64})   -> ?LWES_N_INT_64_ARRAY;
+infer_type ({nullable,  ?LWES_STRING})   -> ?LWES_N_STRING_ARRAY;
+infer_type ({nullable,  ?LWES_BOOLEAN})  -> ?LWES_N_BOOLEAN_ARRAY;
+% currently UNIMPLEMENTED
+% infer_type ({nullable,  ?LWES_IP_ADDR})  -> ?LWES_N_IP_ADDR_ARRAY;
+infer_type ({nullable,  ?LWES_BYTE})     -> ?LWES_N_BYTE_ARRAY;
+% FLOAT arrays will be detected as doubles
+% infer_type ({nullable,  ?LWES_FLOAT})    -> ?LWES_N_FLOAT_ARRAY;
+infer_type ({nullable,  ?LWES_DOUBLE})   -> ?LWES_N_DOUBLE_ARRAY;
+infer_type (_) -> erlang:error(badarg).
 
-type_array (L)        -> type_array(L, undefined).
-type_array ([], Type) -> Type;
-type_array ([ H | T ], PrevType) ->
-  NewType = get_type (H),
-  case rank_type (NewType) > rank_type (PrevType) of
-    true ->
-      type_array (T, NewType);
-    _    ->
-      type_array (T, PrevType)
-  end.
+infer_array_type (V)->
+  lists:foldr(fun infer_array_one/2, {undefined, undefined}, V).
 
-get_type (H) when is_boolean (H)  -> ?LWES_BOOLEAN_ARRAY;
-%% BYTE ARRAY IS INDISTINGUISHABLE FROM
-%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
-%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
-%% THEN USE THE THREE-TUPLE FORM.
-get_type (H) when ?is_string (H)  -> ?LWES_STRING_ARRAY;
-get_type (H) when ?is_byte (H)    -> ?LWES_STRING;
-get_type (H) when is_float (H)    -> ?LWES_DOUBLE_ARRAY;
-get_type (H) when ?is_int16 (H)   -> ?LWES_INT_16_ARRAY;
-get_type (H) when ?is_uint16 (H)  -> ?LWES_U_INT_16_ARRAY;
-get_type (H) when ?is_int32 (H)   -> ?LWES_INT_32_ARRAY;
-get_type (H) when ?is_uint32 (H)  -> ?LWES_U_INT_32_ARRAY;
-get_type (H) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
-get_type (H) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
-get_type (H) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY.
+infer_array_one (undefined, {_, Type}) -> {nullable, Type};
+infer_array_one (T, {N, PrevType}) ->
+  NewType = infer_type (T),
+  {N, case is_integer(T) of
+        true ->
+          case int_order(NewType) > int_order(PrevType) of
+            true -> NewType;
+            false -> PrevType
+          end;
+        false ->
+          case PrevType of
+            _ when is_integer(PrevType)->
+              % can't mix integers and other types
+              erlang:error(badarg);
+            undefined -> NewType;
+            _ when PrevType =:= NewType -> NewType;
+            _ -> erlang:error(badarg)
+          end
+      end
+  }.
 
-infer_type ([H|_]) when is_boolean(H) -> ?LWES_BOOLEAN_ARRAY;
-%% BYTE ARRAY IS INDISTINGUISHABLE FROM
-%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
-%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
-%% THEN USE THE THREE-TUPLE FORM.
-infer_type ([H|_]) when ?is_string (H)  -> ?LWES_STRING_ARRAY;
-infer_type ([H|_]) when ?is_byte (H)    -> ?LWES_STRING;
-infer_type ([H|_]) when is_float (H)    -> ?LWES_DOUBLE_ARRAY;
-infer_type ([H|_]) when ?is_int16 (H)   -> ?LWES_INT_16_ARRAY;
-infer_type ([H|_]) when ?is_uint16 (H)  -> ?LWES_U_INT_16_ARRAY;
-infer_type ([H|_]) when ?is_int32 (H)   -> ?LWES_INT_32_ARRAY;
-infer_type ([H|_]) when ?is_uint32 (H)  -> ?LWES_U_INT_32_ARRAY;
-infer_type ([H|_]) when ?is_int64 (H)   -> ?LWES_INT_64_ARRAY;
-infer_type ([H|_]) when ?is_uint64 (H)  -> ?LWES_U_INT_64_ARRAY;
-infer_type ([H|_]) when ?is_ip_addr (H) -> ?LWES_IP_ADDR_ARRAY;
-infer_type (H) when is_boolean (H) -> ?LWES_BOOLEAN;
-%% BYTE ARRAY IS INDISTINGUISHABLE FROM
-%% STRING, SO WE WILL CONSIDER BYTE ARRAYS
-%% TO BE STRING TYPES BY DEFAULT, IF YOU WANT A BYTE ARRAY
-%% THEN USE THE THREE-TUPLE FORM.
-infer_type (H) when ?is_string (H) -> ?LWES_STRING;
-infer_type (H) when is_float (H)   -> ?LWES_DOUBLE;
-infer_type (H) when ?is_int16 (H)  -> ?LWES_INT_16;
-infer_type (H) when ?is_uint16 (H) -> ?LWES_U_INT_16;
-infer_type (H) when ?is_int32 (H)  -> ?LWES_INT_32;
-infer_type (H) when ?is_uint32 (H) -> ?LWES_U_INT_32;
-infer_type (H) when ?is_int64 (H)  -> ?LWES_INT_64;
-infer_type (H) when ?is_uint64 (H) -> ?LWES_U_INT_64;
-infer_type (H) when ?is_ip_addr (H)-> ?LWES_IP_ADDR.
+int_order (?LWES_U_INT_64) -> 7;
+int_order (?LWES_INT_64) -> 6;
+int_order (?LWES_U_INT_32) -> 5;
+int_order (?LWES_INT_32) -> 4;
+int_order (?LWES_U_INT_16) -> 3;
+int_order (?LWES_INT_16) -> 2;
+int_order (?LWES_BYTE) -> 1;
+int_order (undefined) -> 0.
 
-rank_type (undefined)            ->  0;
-rank_type (?LWES_U_INT_16_ARRAY) ->  1;
-rank_type (?LWES_INT_16_ARRAY)   ->  2;
-rank_type (?LWES_U_INT_32_ARRAY) ->  3;
-rank_type (?LWES_INT_32_ARRAY)   ->  4;
-rank_type (?LWES_U_INT_64_ARRAY) ->  5;
-rank_type (?LWES_INT_64_ARRAY)   ->  6;
-rank_type (?LWES_BOOLEAN_ARRAY)  ->  7;
-rank_type (?LWES_DOUBLE_ARRAY)   ->  8;
-rank_type (?LWES_STRING_ARRAY)   ->  9;
-rank_type (?LWES_STRING)         -> 10.
+% Found the basis of this function
+% here http://erlang.org/pipermail/erlang-questions/2009-May/044073.html
+% and modified to work, the types are here
+% http://erlang.org/doc/reference_manual/typespec.html
+% and state
+%
+% iodata() -> iolist() | binary()
+% iolist() -> maybe_improper_list(byte() | binary() | iolist(), binary() | [])
+%
+is_iodata(B) when is_binary(B) -> true;
+is_iodata(L) -> is_iolist(L).
 
+is_iolist([]) -> true;
+is_iolist([X|Xs]) when ?is_byte(X) ->
+  is_iodata(Xs);
+is_iolist([X|Xs]) ->
+  case is_iodata(X) of
+    true -> is_iodata(Xs);
+    false -> false
+  end;
+is_iolist(_) -> false.
 
 write_key (Key) ->
   write_sized (1, 255, Key).
@@ -2236,6 +2278,120 @@ check_headers_test_ () ->
                       tagged
                     ))
     end
+  ].
+
+type_inference_test_ () ->
+  [
+    % basic non-array type inference
+    { "integer : lower bound exceeded",
+      ?_assertError (badarg, infer_type(-92233720368547758080)) },
+    { "int64 : lower range",
+      ?_assertEqual (?LWES_INT_64, infer_type(-21474836480)) },
+    { "int32 : lower range",
+      ?_assertEqual (?LWES_INT_32, infer_type(-2147483648)) },
+    { "int16 : lower range",
+      ?_assertEqual (?LWES_INT_16, infer_type(-32768)) },
+    { "byte : lower range",
+      ?_assertEqual (?LWES_BYTE, infer_type(0)) },
+    { "byte : upper range",
+      ?_assertEqual (?LWES_BYTE, infer_type(255)) },
+    { "int16 : upper range",
+      ?_assertEqual (?LWES_INT_16, infer_type(32767)) },
+    { "uint16 : upper range",
+      ?_assertEqual (?LWES_U_INT_16, infer_type(65535)) },
+    { "int32 : upper range",
+      ?_assertEqual (?LWES_INT_32, infer_type(2147483647)) },
+    { "uint32 : upper range",
+      ?_assertEqual (?LWES_U_INT_32, infer_type(4294967295)) },
+    { "int64 : upper range",
+      ?_assertEqual (?LWES_INT_64, infer_type(9223372036854775807)) },
+    { "uint64 : upper range",
+      ?_assertEqual (?LWES_U_INT_64, infer_type(18446744073709551615)) },
+    { "integer : upper range exceeded",
+      ?_assertError (badarg, infer_type(18446744073709551616)) },
+    { "boolean : true",
+      ?_assertEqual (?LWES_BOOLEAN, infer_type(true)) },
+    { "boolean : false",
+      ?_assertEqual (?LWES_BOOLEAN, infer_type(false)) },
+    { "ip_addr : good address",
+      ?_assertEqual (?LWES_IP_ADDR, infer_type({127,0,0,1})) },
+    { "ip_addr : bad address",
+      ?_assertError (badarg, infer_type({300,0,0,1})) },
+    { "float/double",
+      ?_assertEqual (?LWES_DOUBLE, infer_type(3.14)) },
+    { "string : list of small integers",
+      ?_assertEqual (?LWES_STRING, infer_type([$c,$a,$t])) },
+    { "string : atoms count as strings",
+      ?_assertEqual (?LWES_STRING, infer_type('cat')) },
+    { "string : binaries count as strings",
+      ?_assertEqual (?LWES_STRING, infer_type(<<"cat">>)) },
+    { "string : iolists count as strings",
+      ?_assertEqual (?LWES_STRING, infer_type([$c,"a",<<"t">>])) },
+    { "string : iolists which are improper lists count as strings",
+      ?_assertEqual (?LWES_STRING, infer_type([$c,"a"|<<"t">>])) },
+
+    % array type inference
+    %
+    { "uint16 array",
+      ?_assertEqual(?LWES_U_INT_16_ARRAY, infer_type([0,65535,32,85])) },
+    { "int16 array",
+      ?_assertEqual(?LWES_INT_16_ARRAY, infer_type([-32768,32767,-32,85])) },
+    { "uint32 array",
+      ?_assertEqual(?LWES_U_INT_32_ARRAY, infer_type([0,65535,32,85,4294967295])) },
+    { "int32 array",
+      ?_assertEqual(?LWES_INT_32_ARRAY, infer_type([-32769,-32768,32767,-32,85, 65535])) },
+    { "uint64 array",
+      ?_assertEqual(?LWES_U_INT_64_ARRAY, infer_type([0,65535,32,85,4294967295, 18446744073709551615])) },
+    { "int64 array",
+      ?_assertEqual(?LWES_INT_64_ARRAY, infer_type([-9223372036854775807, -32769,-32768,32767,-32,85, 65535])) },
+    { "string array : with atoms these are detectable",
+      ?_assertEqual(?LWES_STRING_ARRAY, infer_type([foo,bar])) },
+    { "string array : with atoms these are detectable",
+      ?_assertEqual(?LWES_STRING_ARRAY, infer_type([foo,"bar"])) },
+    { "string array : with atoms these are detectable",
+      ?_assertEqual(?LWES_STRING_ARRAY, infer_type([foo,["bar"|<<"baz">>]])) },
+    { "boolean array",
+      ?_assertEqual(?LWES_BOOLEAN_ARRAY, infer_type([true,false,true])) },
+    { "ip_addr array",
+      ?_assertEqual(?LWES_IP_ADDR_ARRAY, infer_type([{127,0,0,1},{255,255,255,255}])) },
+    { "float/double array",
+      ?_assertEqual(?LWES_DOUBLE_ARRAY, infer_type([3.14159,2.0]))
+    },
+
+    % nullable array type inference
+    { "nullable uint16 array",
+      ?_assertEqual(?LWES_N_U_INT_16_ARRAY, infer_type([undefined, 0,65535,32,85])) },
+    { "nullable int16 array",
+      ?_assertEqual(?LWES_N_INT_16_ARRAY, infer_type([-32768,undefined,32767,-32,85])) },
+    { "nullable uint32 array",
+      ?_assertEqual(?LWES_N_U_INT_32_ARRAY, infer_type([0,65535,32,85,undefined,4294967295])) },
+    { "nullable int32 array",
+      ?_assertEqual(?LWES_N_INT_32_ARRAY, infer_type([-32769,-32768,32767,-32,85, 65535,undefined])) },
+    { "nullable uint64 array",
+      ?_assertEqual(?LWES_N_U_INT_64_ARRAY, infer_type([0,undefined,65535,undefined,4294967295, 18446744073709551615])) },
+    { "nullable int64 array",
+      ?_assertEqual(?LWES_N_INT_64_ARRAY, infer_type([-9223372036854775807, -32769,undefined,32767,-32,85, 65535])) },
+    { "nullable string array 1",
+      ?_assertEqual(?LWES_N_STRING_ARRAY, infer_type(["foo",undefined,"bar"])) },
+    { "nullable string array 2",
+      ?_assertEqual(?LWES_N_STRING_ARRAY, infer_type([foo,"bar",undefined])) },
+    { "nullable string array 3",
+      ?_assertEqual(?LWES_N_STRING_ARRAY, infer_type([undefined,foo,["bar"|<<"baz">>]])) },
+    { "nullable byte array : only detectable form",
+      ?_assertEqual(?LWES_N_BYTE_ARRAY, infer_type([undefined,$c,$a,$t])) },
+    { "nullable boolean array",
+      ?_assertEqual(?LWES_N_BOOLEAN_ARRAY, infer_type([true,false,true, undefined])) },
+    { "nullable ip_addr array is not implemented",
+      ?_assertError(badarg, infer_type([{127,0,0,1},undefined,{255,255,255,255}])) },
+    { "nullable float/double",
+      ?_assertEqual(?LWES_N_DOUBLE_ARRAY, infer_type([3.14159,undefined,2.0]))
+    }
+
+
+
+    % coverage cases
+
+
   ].
 
 -endif.
