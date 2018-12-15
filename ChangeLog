@@ -1,3 +1,6 @@
+* Fri Dec 14 2018 Anthony Molinaro (djnym) 4.7.1
+- use rebar3 in Makefile
+
 * Tue Jul 24 2018 Anthony Molinaro (djnym) 4.7.0
 - fix for json output of arrays
 - rewrite type inference and add tests for it
