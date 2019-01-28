@@ -61,6 +61,8 @@ initialize (Id = {_, {_,_}}) ->
   init0 (Id);
 initialize (Id = {_, _}) ->
   init0 (Id);
+initialize (Id) when is_atom(Id) ->
+  init0 (Id);
 initialize (_) ->
   erlang:error(badarg).
 
@@ -153,6 +155,10 @@ rollup(label) ->
                    sent = S, received = R, errors = E,
                    considered = C, validated = V}, Accum) ->
             add_by_key ({Label,{'*','*'}}, S, R, E, C, V, Accum);
+          (#stats {id = M,
+                   sent = S, received = R, errors = E,
+                   considered = C, validated = V}, Accum) when is_atom(M) ->
+            add_by_key (M, S, R, E, C, V, Accum);
           (#stats { sent = S, received = R, errors = E,
                     considered = C, validated = V}, Accum) ->
             add_by_key ({'_',{'*','*'}}, S, R, E, C, V, Accum)
@@ -171,7 +177,11 @@ rollup(port) ->
           (#stats {id = {_, Port},
                    sent = S, received = R, errors = E,
                    considered = C, validated = V}, Accum) ->
-            add_by_key ({'*',{'*',Port}}, S, R, E, C, V, Accum)
+            add_by_key ({'*',{'*',Port}}, S, R, E, C, V, Accum);
+          (#stats {id = M,
+                   sent = S, received = R, errors = E,
+                   considered = C, validated = V}, Accum) when is_atom(M) ->
+            add_by_key (M, S, R, E, C, V, Accum)
       end,
       { dict:new(), dict:new() },
       ets:tab2list(?TABLE)
@@ -179,7 +189,11 @@ rollup(port) ->
   );
 rollup(none) ->
   [
-    [ case I of {_,{_,_}} -> I ; _ -> {'*',I} end, S, R, E, C, V ]
+    [ case I of
+        M when is_atom(M) -> M ;
+        {_,{_,_}} -> I ;
+        _ -> {'*',I}
+      end, S, R, E, C, V ]
     || #stats { id = I, sent = S, received = R,
                 errors = E, considered = C, validated = V}
     <- ets:tab2list(?TABLE)
@@ -199,11 +213,18 @@ print (Type) ->
               "----------","----------",
               "----------","----------","----------"]),
   [
-    io:format ("~-21w ~-21s ~10b ~10b ~10b ~10b ~10b~n",
+    begin
+      {Label, IpPort} =
+        case Key of
+          {L, IP= {_,_}} -> {L, IP};
+          M when is_atom(M) -> {M, {'*','*'}}
+        end,
+      io:format ("~-21w ~-21s ~10b ~10b ~10b ~10b ~10b~n",
                [Label, format_ip_port (IpPort),
                 Sent, Recv, Err, Cons, Valid]
               )
-    || [ {Label, IpPort = {_,_}}, Sent, Recv, Err, Cons, Valid ]
+    end
+    || [ Key, Sent, Recv, Err, Cons, Valid ]
     <- rollup(Type)
   ],
   ok.
