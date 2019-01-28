@@ -110,8 +110,10 @@ start () ->
 
 % Support older queue like config using groups which should work the same
 % way
-open (emitters, {N, L}) when is_integer(N), is_list(L) ->
+open (emitters, {N, L}) when is_integer (N), is_list (L) ->
   open (emitters, {N, group, L});
+open (emitters, {M, Config}) when is_atom (M) ->
+  M:new(Config);
 open (emitters, Config) ->
   lwes_multi_emitter:new (Config);
 open (emitter, Config) ->
@@ -138,6 +140,8 @@ emit (Channel, Event) when is_record (Channel, lwes_channel) ->
   lwes_channel:send_to (Channel, lwes_event:to_binary (Event)),
   % channel doesn't actually change for a single emitter
   Channel;
+emit (StateIn = {Module,_}, Event) when is_atom (Module) ->
+  Module:emit (StateIn, Event);
 emit (Channels, Event) ->
   lwes_multi_emitter:emit (Channels, Event),
   Channels.
@@ -195,6 +199,8 @@ listen (Channel, CallbackFunction, EventType, CallbackInitialState)
 % close the channel or channels
 close (Channel) when is_record (Channel, lwes_channel) ->
   lwes_channel:close (Channel);
+close (StateIn = {Module,_}) when is_atom (Module) ->
+  Module:close (StateIn);
 close (Channels) ->
   lwes_multi_emitter:close (Channels).
 

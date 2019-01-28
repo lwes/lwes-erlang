@@ -1,12 +1,7 @@
 #!/bin/sh
 
-deps=
-for d in deps/* ; do
-  deps="$deps -pa $d/ebin"
-done
-exec erl \
-  -name lwes -setcookie lwes \
-  -config lwes.config \
-  $deps \
-  -pa ebin \
-  -s lwes_app
+exec rebar3 shell \
+  --setcookie lwes \
+  --name 'lwes@localhost.localdomain' \
+  --config lwes.config \
+  --apps lwes
