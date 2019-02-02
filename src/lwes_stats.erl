@@ -351,6 +351,7 @@ lwes_stats_rollups_test_ () ->
   Id2 = {{127,0,0,1},9192},
   Id3 = {foo, Id1},
   Id4 = {foo, Id2},
+  Id5 = bar,
   LabelRollupId1 = {foo,{'*','*'}},
   LabelRollupId2 = {'_',{'*','*'}},
   PortRollupId1 = {'*',{'*',9191}},
@@ -360,26 +361,32 @@ lwes_stats_rollups_test_ () ->
     fun cleanup/1,
     { inorder,
       [
-        [ ?_assertEqual(true, initialize(I)) || I <- [ Id1, Id2, Id3, Id4 ] ],
+        [ ?_assertEqual(true, initialize(I))
+          || I <- [ Id1, Id2, Id3, Id4, Id5 ] ],
         ?_assertEqual(1, increment_sent(Id1)),
         ?_assertEqual(1, increment_sent(Id4)),
         ?_assertEqual(1, increment_received(Id2)),
         ?_assertEqual(1, increment_received(Id3)),
         ?_assertEqual(1, increment_errors(Id3)),
         ?_assertEqual(1, increment_errors(Id4)),
+        ?_assertEqual(1, increment_sent(Id5)),
+        ?_assertEqual(1, increment_errors(Id5)),
         % check no rollups
         ?_assertEqual(lists:sort([[{'*',Id1},1,0,0,0,0],
                                   [{'*',Id2},0,1,0,0,0],
                                   [Id3,0,1,1,0,0],
-                                  [Id4,1,0,1,0,0]]),
+                                  [Id4,1,0,1,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(none))),
         % check rollup by label
         ?_assertEqual(lists:sort([[LabelRollupId1,1,1,2,0,0],
-                                  [LabelRollupId2,1,1,0,0,0]]),
+                                  [LabelRollupId2,1,1,0,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(label))),
         % check rollup by port
         ?_assertEqual(lists:sort([[PortRollupId1,1,1,1,0,0],
-                                  [PortRollupId2,1,1,1,0,0]]),
+                                  [PortRollupId2,1,1,1,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(port)))
       ]
     }
