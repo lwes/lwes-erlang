@@ -1,3 +1,8 @@
+*     Feb    2019 Anthony Molinaro (djnym) 5.0.0
+- Only accept {Ip,Port} or {Ip,Port,ListOfOptions} form for UDP Address
+configuration - BREAKS Backward compatibility if using the old 3 or 4 element
+forms
+
 * Fri Dec 14 2018 Anthony Molinaro (djnym) 4.7.1
 - use rebar3 in Makefile
 

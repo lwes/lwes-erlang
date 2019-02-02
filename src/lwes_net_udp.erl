@@ -74,8 +74,6 @@ open (emitter, #lwes_net_udp { options = Options}) ->
 % just be reused when sending in most cases
 send (Socket, {Ip, Port, _}, Packet) ->
   gen_udp:send (Socket, Ip, Port, Packet);
-send (Socket, {Ip, Port, _, _}, Packet) ->
-  gen_udp:send (Socket, Ip, Port, Packet);
 send (Socket, {Ip, Port}, Packet) ->
   gen_udp:send (Socket, Ip, Port, Packet);
 send (Socket, #lwes_net_udp { ip = Ip, port = Port}, Packet) ->
@@ -173,13 +171,6 @@ check_config ({Ip, Port}) ->
                   is_multicast = is_multicast(CheckedIp) };
 check_config ({Ip, Port, Options}) when is_list (Options) ->
   parse_options (Options, check_config ({Ip,Port}));
-check_config ({Ip, Port, TTL}) when ?is_ttl (TTL) ->
-  InitialStruct = check_config ({Ip, Port}),
-  InitialStruct#lwes_net_udp { ttl = TTL };
-check_config ({Ip, Port, TTL, Recbuf})
-  when ?is_ttl (TTL) andalso is_integer(Recbuf) ->
-  InitialStruct = check_config ({Ip, Port}),
-  InitialStruct#lwes_net_udp { ttl = TTL, recbuf = Recbuf };
 check_config (_) ->
   % essentially turns function_clause error into badarg
   erlang:error (badarg).
@@ -211,8 +202,8 @@ lwes_net_udp_test_ () ->
       || C
       <- [
            {"127.0.0.1",12321},
-           {"127.0.0.1",12321,3},
-           {"127.0.0.1",12321,12,65535},
+           {"127.0.0.1",12321,[{ttl,3}]},
+           {"127.0.0.1",12321,[{ttl,12},{recbuf, 65535}]},
            {"224.1.1.111",12321,[{multicast_loop, true}]}
          ]
     ]
@@ -271,11 +262,7 @@ check_config_test_ () ->
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = 3, recbuf = 65535},
-                   check_config ({{127,0,0,1},9191,3,65535})),
-    ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
-                                  is_multicast = false,
-                                  ttl = 3, recbuf = 65535},
-                   check_config ({"127.0.0.1",9191,3,65535})),
+                   check_config ({{127,0,0,1},9191,[{ttl,3},{recbuf,65535}]})),
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = 3, recbuf = 65535},
@@ -289,11 +276,11 @@ check_config_test_ () ->
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = 3, recbuf = ?DEFAULT_RECBUF},
-                   check_config ({"127.0.0.1",9191,3})),
+                   check_config ({"127.0.0.1",9191,[{ttl,3}]})),
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = 3, recbuf = ?DEFAULT_RECBUF},
-                                  check_config ({{127,0,0,1},9191,3})),
+                                  check_config ({{127,0,0,1},9191,[{ttl,3}]})),
     ?_assertEqual (#lwes_net_udp {ip = {127,0,0,1}, port = 9191,
                                   is_multicast = false,
                                   ttl = ?DEFAULT_TTL, recbuf = ?DEFAULT_RECBUF},

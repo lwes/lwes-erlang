@@ -62,6 +62,7 @@ start () ->
 %
 % config for emitter/listener is
 %   { Ip, Port }
+%
 % config for emitters (aka, multi emitter) is, default strategy is queue
 % for backward compatibility
 %   { NumberToSendToInThisGroup, [queue | random]
@@ -71,6 +72,7 @@ start () ->
 %       {IpN,PortN}
 %     ]
 %   }
+%
 % config for groups is
 %   { NumberOfGroupsToSendTo,
 %     group,
@@ -108,16 +110,10 @@ start () ->
 %  }
 %  which should send each event to one machine in each group
 
-% Support older queue like config using groups which should work the same
-% way
-open (emitters, {N, L}) when is_integer (N), is_list (L) ->
-  open (emitters, {N, group, L});
-open (emitters, {M, Config}) when is_atom (M) ->
-  M:new(Config);
+open (emitter, Config) ->
+  open (emitters, Config);
 open (emitters, Config) ->
   lwes_multi_emitter:new (Config);
-open (emitter, Config) ->
-  open (emitters, {1, group, [Config]});
 open (listener, Config) ->
   try lwes_channel:new (listener, Config) of
     C -> lwes_channel:open (C)
@@ -334,7 +330,7 @@ simple_test_ () ->
   }.
 
 mondemand_w_ttl_test_ () ->
-  Address = {"127.0.0.1",12321, 25},
+  Address = {"127.0.0.1",12321, [{ttl,25}]},
   NumberToSendTo = 1,
   EventsToSend = 100,
   EmitterConfig = {NumberToSendTo, [Address]},
