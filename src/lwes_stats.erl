@@ -61,6 +61,8 @@ initialize (Id = {_, {_,_}}) ->
   init0 (Id);
 initialize (Id = {_, _}) ->
   init0 (Id);
+initialize (Id) when is_atom(Id) ->
+  init0 (Id);
 initialize (_) ->
   erlang:error(badarg).
 
@@ -153,6 +155,10 @@ rollup(label) ->
                    sent = S, received = R, errors = E,
                    considered = C, validated = V}, Accum) ->
             add_by_key ({Label,{'*','*'}}, S, R, E, C, V, Accum);
+          (#stats {id = M,
+                   sent = S, received = R, errors = E,
+                   considered = C, validated = V}, Accum) when is_atom(M) ->
+            add_by_key (M, S, R, E, C, V, Accum);
           (#stats { sent = S, received = R, errors = E,
                     considered = C, validated = V}, Accum) ->
             add_by_key ({'_',{'*','*'}}, S, R, E, C, V, Accum)
@@ -171,7 +177,11 @@ rollup(port) ->
           (#stats {id = {_, Port},
                    sent = S, received = R, errors = E,
                    considered = C, validated = V}, Accum) ->
-            add_by_key ({'*',{'*',Port}}, S, R, E, C, V, Accum)
+            add_by_key ({'*',{'*',Port}}, S, R, E, C, V, Accum);
+          (#stats {id = M,
+                   sent = S, received = R, errors = E,
+                   considered = C, validated = V}, Accum) when is_atom(M) ->
+            add_by_key (M, S, R, E, C, V, Accum)
       end,
       { dict:new(), dict:new() },
       ets:tab2list(?TABLE)
@@ -179,7 +189,11 @@ rollup(port) ->
   );
 rollup(none) ->
   [
-    [ case I of {_,{_,_}} -> I ; _ -> {'*',I} end, S, R, E, C, V ]
+    [ case I of
+        M when is_atom(M) -> M ;
+        {_,{_,_}} -> I ;
+        _ -> {'*',I}
+      end, S, R, E, C, V ]
     || #stats { id = I, sent = S, received = R,
                 errors = E, considered = C, validated = V}
     <- ets:tab2list(?TABLE)
@@ -199,11 +213,18 @@ print (Type) ->
               "----------","----------",
               "----------","----------","----------"]),
   [
-    io:format ("~-21w ~-21s ~10b ~10b ~10b ~10b ~10b~n",
+    begin
+      {Label, IpPort} =
+        case Key of
+          {L, IP= {_,_}} -> {L, IP};
+          M when is_atom(M) -> {M, {'*','*'}}
+        end,
+      io:format ("~-21w ~-21s ~10b ~10b ~10b ~10b ~10b~n",
                [Label, format_ip_port (IpPort),
                 Sent, Recv, Err, Cons, Valid]
               )
-    || [ {Label, IpPort = {_,_}}, Sent, Recv, Err, Cons, Valid ]
+    end
+    || [ Key, Sent, Recv, Err, Cons, Valid ]
     <- rollup(Type)
   ],
   ok.
@@ -330,6 +351,7 @@ lwes_stats_rollups_test_ () ->
   Id2 = {{127,0,0,1},9192},
   Id3 = {foo, Id1},
   Id4 = {foo, Id2},
+  Id5 = bar,
   LabelRollupId1 = {foo,{'*','*'}},
   LabelRollupId2 = {'_',{'*','*'}},
   PortRollupId1 = {'*',{'*',9191}},
@@ -339,26 +361,32 @@ lwes_stats_rollups_test_ () ->
     fun cleanup/1,
     { inorder,
       [
-        [ ?_assertEqual(true, initialize(I)) || I <- [ Id1, Id2, Id3, Id4 ] ],
+        [ ?_assertEqual(true, initialize(I))
+          || I <- [ Id1, Id2, Id3, Id4, Id5 ] ],
         ?_assertEqual(1, increment_sent(Id1)),
         ?_assertEqual(1, increment_sent(Id4)),
         ?_assertEqual(1, increment_received(Id2)),
         ?_assertEqual(1, increment_received(Id3)),
         ?_assertEqual(1, increment_errors(Id3)),
         ?_assertEqual(1, increment_errors(Id4)),
+        ?_assertEqual(1, increment_sent(Id5)),
+        ?_assertEqual(1, increment_errors(Id5)),
         % check no rollups
         ?_assertEqual(lists:sort([[{'*',Id1},1,0,0,0,0],
                                   [{'*',Id2},0,1,0,0,0],
                                   [Id3,0,1,1,0,0],
-                                  [Id4,1,0,1,0,0]]),
+                                  [Id4,1,0,1,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(none))),
         % check rollup by label
         ?_assertEqual(lists:sort([[LabelRollupId1,1,1,2,0,0],
-                                  [LabelRollupId2,1,1,0,0,0]]),
+                                  [LabelRollupId2,1,1,0,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(label))),
         % check rollup by port
         ?_assertEqual(lists:sort([[PortRollupId1,1,1,1,0,0],
-                                  [PortRollupId2,1,1,1,0,0]]),
+                                  [PortRollupId2,1,1,1,0,0],
+                                  [Id5,1,0,1,0,0]]),
                       lists:sort(rollup(port)))
       ]
     }

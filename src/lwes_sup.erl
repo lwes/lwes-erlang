@@ -29,12 +29,12 @@ init([]) ->
           worker,
           [ lwes_stats ]
         },
-        { lwes_emitter,
-          { lwes_emitter, start_link, [[{id, lwes_emitters}]] },
+        { lwes_emitter_udp_pool,
+          { lwes_emitter_udp_pool, start_link, [[{id, lwes_emitters}]] },
           permanent,
           2000,
           worker,
-          [ lwes_emitter ]
+          [ lwes_emitter_udp_pool ]
         },
         { lwes_channel_manager,                    % child spec id
           { lwes_channel_manager, start_link, [] },% child function to call

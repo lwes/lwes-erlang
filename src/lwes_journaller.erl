@@ -12,10 +12,13 @@
 
 -behaviour (gen_server).
 
+-include_lib ("lwes_internal.hrl").
+
 %% API
 -export ([ start_link/1,
            process_event/2,
-           rotate/1 ]).
+           rotate/1,
+           format_header/5 ]).
 
 %% gen_server callbacks
 -export ([ init/1,
@@ -82,22 +85,27 @@ handle_call (Request, From, State) ->
   error_logger:warning_msg ("Unrecognized call ~p from ~p~n",[Request, From]),
   { reply, ok, State }.
 
-handle_cast ( {process, {udp, _, {V1, V2, V3, V4}, P, B}},
+format_header (EventSize, MillisTimestamp, Ip = {Ip1,Ip2,Ip3,Ip4}, Port, SiteId)
+  when ?is_uint16(EventSize), ?is_uint64(MillisTimestamp), ?is_ip_addr (Ip),
+       ?is_uint16(Port), ?is_uint16(SiteId) ->
+  <<EventSize:16/integer-unsigned-big,        % 2 bytes
+    MillisTimestamp:64/integer-unsigned-big,  % 8 bytes
+    Ip4:8/integer-unsigned-big,               % 1 byte
+    Ip3:8/integer-unsigned-big,               % 1 byte
+    Ip2:8/integer-unsigned-big,               % 1 byte
+    Ip1:8/integer-unsigned-big,               % 1 byte
+    Port:16/integer-unsigned-big,             % 2 bytes
+    SiteId:16/integer-unsigned-big,           % 2 bytes
+    0:32/integer-signed-big                   % 4 bytes
+  >>.                                         % 22 bytes total
+
+handle_cast ( {process, {udp, _, Ip, Port, B}},
               State = #state { journal_current = Journal }) ->
   S = byte_size (B),
   M = milliseconds_since_epoch (),
-  I = 1,
+  SiteId = 1,
   ok = file:write ( Journal,
-                    [ <<S:16/integer-unsigned-big,  % 2
-                        M:64/integer-unsigned-big,  % 8
-                        V4:8/integer-unsigned-big,  % 1
-                        V3:8/integer-unsigned-big,  % 1
-                        V2:8/integer-unsigned-big,  % 1
-                        V1:8/integer-unsigned-big,  % 1
-                        P:16/integer-unsigned-big,  % 2
-                        I:16/integer-unsigned-big,  % 2
-                        0:32/integer-signed-big     % 4
-                      >>,
+                    [ format_header(S, M, Ip, Port, SiteId),
                       B
                     ]),
   { noreply, State };
