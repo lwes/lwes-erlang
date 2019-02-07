@@ -63,16 +63,6 @@ start () ->
 % config for emitter/listener is
 %   { Ip, Port }
 %
-% config for emitters (aka, multi emitter) is, default strategy is queue
-% for backward compatibility
-%   { NumberToSendToInThisGroup, [queue | random]
-%     [
-%       {Ip0,Port0},
-%       ...,
-%       {IpN,PortN}
-%     ]
-%   }
-%
 % config for groups is
 %   { NumberOfGroupsToSendTo,
 %     group,

@@ -1,8 +1,9 @@
 -module(lwes_emitter).
 
 % create any resources and return a fixed structure which will be sent in
-% subsequent calls
--callback new(Config :: term()) -> State :: term().
+% subsequent calls, configuration is expected to be a list of some sort,
+% most of the time this will be something like [{key, value}].
+-callback new(Config :: list()) -> State :: term().
 
 % return an id to be used for stats gathering.  In most cases this should
 % be an atom so that it will show up under the label column for lwes:stats()
